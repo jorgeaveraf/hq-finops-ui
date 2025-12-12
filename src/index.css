@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: only light;
+  background: #f5f7fa;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Inter', system-ui, sans-serif;
+  background: radial-gradient(120% 120% at 20% 20%, rgba(63, 198, 184, 0.08), transparent 45%),
+    radial-gradient(120% 120% at 80% 0%, rgba(15, 123, 115, 0.08), transparent 40%),
+    #f5f7fa;
+  color: #0f1f2d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.glass-card {
+  @apply bg-white/90 backdrop-blur-lg shadow-soft border border-slate-100 rounded-2xl;
+}
+
+.input-base {
+  @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 shadow-[0_1px_2px_rgba(15,30,44,0.04)] focus:border-hq-teal focus:outline-none focus:ring-2 focus:ring-hq-teal/20 transition;
+}
+
+.label {
+  @apply text-sm font-medium text-slate-700;
+}
