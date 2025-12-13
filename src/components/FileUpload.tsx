@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState, type DragEvent } from 'react'
 import { Paperclip, Upload, X } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -14,19 +14,39 @@ type FileUploadProps = {
 
 export function FileUpload({ label, description, files, onChange, required, accept, hidden }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   const handleSelect = (fileList: FileList | null) => {
     if (!fileList) return
     const next = [...files, ...Array.from(fileList)]
     onChange(next)
+    if (inputRef.current) {
+      inputRef.current.value = ''
+    }
+  }
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDragging(false)
+    handleSelect(e.dataTransfer?.files ?? null)
   }
 
   return (
     <div className={clsx(hidden && 'hidden')}>
       <p className="label mb-2">{label}</p>
       <div
-        className="border-2 border-dashed border-slate-200 rounded-xl bg-white/60 hover:border-hq-teal/50 transition cursor-pointer p-4"
+        data-testid="file-upload-dropzone"
+        className={clsx(
+          'border-2 border-dashed border-slate-200 rounded-xl bg-white/60 hover:border-hq-teal/50 transition cursor-pointer p-4',
+          isDragging && 'border-hq-teal bg-hq-teal/5',
+        )}
         onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault()
+          setIsDragging(true)
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
       >
         <input
           ref={inputRef}

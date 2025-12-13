@@ -15,7 +15,7 @@ describe('LoginPage', () => {
     )
 
     expect(screen.getByLabelText(/username/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/password/i, { selector: 'input' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
   })
 })
