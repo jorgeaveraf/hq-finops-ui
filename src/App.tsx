@@ -11,7 +11,7 @@ import { AppLayout } from './layout/AppLayout'
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/automations">
       <AuthProvider>
         <Toaster
           position="top-right"

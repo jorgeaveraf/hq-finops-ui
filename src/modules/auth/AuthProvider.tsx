@@ -45,7 +45,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     localStorage.removeItem(AUTH_KEY)
     sessionStorage.removeItem(AUTH_KEY)
     setUser(null)
-    window.location.replace('/login')
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
+    window.location.replace(`${base}login`)
   }
 
   const value = useMemo(
