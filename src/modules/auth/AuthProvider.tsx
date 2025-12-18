@@ -2,6 +2,7 @@ import { createContext, useEffect, useMemo, useState, type PropsWithChildren } f
 
 type AuthContextValue = {
   user: { name: string; email: string } | null
+  role: 'admin' | 'operator' | null
   isAuthenticated: boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => void
@@ -9,33 +10,53 @@ type AuthContextValue = {
 }
 
 const AUTH_KEY = 'hq_finops_auth'
-const FALLBACK_USERNAME = 'admin'
-const FALLBACK_PASSWORD = 'admin'
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const expectedUsername = import.meta.env.VITE_APP_USERNAME || FALLBACK_USERNAME
-  const expectedPassword = import.meta.env.VITE_APP_PASSWORD || FALLBACK_PASSWORD
+  const expectedUsername = String(import.meta.env.VITE_APP_USERNAME || '')
+  const expectedPassword = String(import.meta.env.VITE_APP_PASSWORD || '')
+  const adminUsername = String(import.meta.env.VITE_ADMIN_USERNAME || '')
+  const adminPassword = String(import.meta.env.VITE_ADMIN_PASSWORD || '')
   const [user, setUser] = useState<{ name: string; email: string } | null>(null)
+  const [role, setRole] = useState<'admin' | 'operator' | null>(null)
 
   useEffect(() => {
     const stored = localStorage.getItem(AUTH_KEY) || sessionStorage.getItem(AUTH_KEY)
-    if (stored === '1') {
+    if (stored === 'admin') {
+      setRole('admin')
+      setUser({
+        name: 'Admin',
+        email: adminUsername || 'admin',
+      })
+      return
+    }
+    if (stored === 'operator' || stored === '1') {
+      setRole('operator')
       setUser({
         name: 'FinOps Operator',
         email: `${expectedUsername}`,
       })
     }
-  }, [expectedUsername])
+  }, [adminUsername, expectedUsername])
 
   const login = async (username: string, password: string) => {
-    if (username === expectedUsername && password === expectedPassword) {
+    if (adminUsername && adminPassword && username === adminUsername && password === adminPassword) {
+      setRole('admin')
+      setUser({
+        name: 'Admin',
+        email: adminUsername,
+      })
+      localStorage.setItem(AUTH_KEY, 'admin')
+      return
+    }
+    if (expectedUsername && expectedPassword && username === expectedUsername && password === expectedPassword) {
+      setRole('operator')
       setUser({
         name: 'FinOps Operator',
         email: `${username}`,
       })
-      localStorage.setItem(AUTH_KEY, '1')
+      localStorage.setItem(AUTH_KEY, 'operator')
       return
     }
     throw new Error('Invalid credentials')
@@ -45,6 +66,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     localStorage.removeItem(AUTH_KEY)
     sessionStorage.removeItem(AUTH_KEY)
     setUser(null)
+    setRole(null)
     const base = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
     window.location.replace(`${base}login`)
   }
@@ -52,12 +74,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const value = useMemo(
     () => ({
       user,
+      role,
       isAuthenticated: Boolean(user),
       login,
       logout,
       expectedUsername,
     }),
-    [user, expectedUsername],
+    [user, role, expectedUsername],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

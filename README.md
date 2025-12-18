@@ -18,8 +18,18 @@ Create a `.env` (or `.env.local`) if you need overrides:
 - `VITE_INGESTION_API_BASE_URL` (default: `http://localhost:8001`)
 - `VITE_APP_USERNAME` (default: `admin`)
 - `VITE_APP_PASSWORD` (default: `admin`)
+- `QBO_GATEWAY_BASE_URL` (proxy target for qbo-gateway; safe to set in `.env`)
 
 The login is front-only: credentials are checked in the browser and an auth flag is stored in `localStorage` (or session if “remember me” is unchecked). No backend auth is used.
+
+For qbo-gateway access (keep these out of `.env` in the frontend repo), export before running `npm run dev`:
+
+```bash
+export QBO_GATEWAY_API_KEY="..."
+export QBO_GATEWAY_BASE_URL="http://127.0.0.1:8000"
+```
+
+All qbo-gateway calls go through `/qbo-api/*` so the Vite proxy injects `X-API-Key` and `Accept: application/json` server-side; the browser never stores or ships the API key.
 
 ## Scripts
 
@@ -31,6 +41,7 @@ The login is front-only: credentials are checked in the browser and an auth flag
 
 ## Features
 
+- Clients & Integrations module hitting qbo-gateway via `/qbo-api` (list clients, view detail, create when supported, and trigger OAuth reconnect without exposing API keys).
 - Auth gate with `/login`, remember-me toggle, and sign-out from the header.
 - Protected routes: dashboard, Part 1 ingestion, Part 2 QBO export, and run details.
 - Form flows with CSV upload (multi-file), validation, and submission to ingestion-gateway.
@@ -42,6 +53,7 @@ The login is front-only: credentials are checked in the browser and an auth flag
 - `src/api` — Axios client + request/response types.
 - `src/modules/auth` — `AuthProvider`, `useAuth`, login page, and `RequireAuth`.
 - `src/modules/part1` / `src/modules/part2` — ingestion + export flows and status panels.
+- `src/modules/qbo` — qbo-gateway HTTP client, Clients & Integrations pages, and the OAuth reconnect UI.
 - `src/modules/dashboard` — overview cards and shortcuts.
 - `src/modules/runs` — optional run detail page with polling.
 - `src/hooks` — `usePolling` for DAG status.
