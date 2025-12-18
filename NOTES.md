@@ -6,9 +6,11 @@
 - **Modules**:
   - `modules/part1` — Bank ingestion form with CSV dropzone and live status panel.
   - `modules/part2` — QBO export form with source toggle (warehouse vs samples + CSVs) and polling.
+  - `modules/qbo` — qbo-gateway client + Clients & Integrations pages (list/detail/create) and OAuth reconnect UI (calls `/qbo-api/auth/connect` and surfaces `redirect_url` without auto-redirecting).
   - `modules/runs` — Optional run detail view wired to polling.
   - `modules/dashboard` — Overview hero + quick action cards.
   - `modules/auth` — Login page, provider, hook, and guard.
 - **UI**: Tailwind with HQ teal palette; primitives in `src/components` (buttons, cards, alerts, form fields, dropzone, status badge). Layout shell in `src/layout/AppLayout.tsx`.
 - **Styling**: Global styles in `src/index.css` (HQ background gradients, card shadows, form field classes). Tailwind theme extended with hq teal/gray/navy colors.
 - **Testing**: Vitest + Testing Library with two smoke tests (`src/tests`) covering login form rendering and Part 1 form validation state.
+- **qbo-gateway proxy**: Vite dev server proxies `/qbo-api/*` to `QBO_GATEWAY_BASE_URL` (default `http://127.0.0.1:8000`), rewriting the prefix and injecting `X-API-Key` + `Accept: application/json` headers. Set `QBO_GATEWAY_API_KEY` in your shell before `npm run dev`; never store this secret in the frontend `.env`.

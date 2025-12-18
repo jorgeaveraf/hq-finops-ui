@@ -1,26 +1,27 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { LogOut, UploadCloud, Home, Send } from 'lucide-react'
+import { LogOut, UploadCloud, Home, Send, PlugZap } from 'lucide-react'
 import { useAuth } from '../modules/auth/useAuth'
 import { Button } from '../components/Button'
 import { useHealthStatus } from '../hooks/useHealthStatus'
+import hqLogo from '../assets/hq-logo.png'
 
 const navItems = [
   { to: '/', label: 'Overview', icon: Home },
   { to: '/ingest/part1', label: 'Bank ingestion (Part 1)', icon: UploadCloud },
   { to: '/ingest/part2', label: 'QBO export (Part 2)', icon: Send },
+  { to: '/qbo/clients', label: 'Clients & Integrations', icon: PlugZap },
 ]
 
 export function AppLayout() {
-  const { user, logout } = useAuth()
+  const { user, logout, role } = useAuth()
   const { status: healthStatus, message: healthMessage, lastChecked } = useHealthStatus()
+  const items = role === 'admin' ? navItems : navItems.filter((item) => item.to !== '/qbo/clients')
 
   return (
     <div className="min-h-screen bg-hq-gray flex">
       <aside className="hidden md:flex w-64 flex-col border-r border-slate-200 bg-white/90 backdrop-blur-lg shadow-soft">
         <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100">
-          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-hq-teal to-emerald-400 text-white font-semibold flex items-center justify-center">
-            HQ
-          </div>
+          <img src={hqLogo} alt="HQ" className="h-10 w-10 rounded-full object-contain" />
           <div>
             <p className="text-sm font-semibold" style={{ color: '#178a8a' }}>
               Headquarters
@@ -29,7 +30,7 @@ export function AppLayout() {
           </div>
         </div>
         <nav className="flex-1 p-4 space-y-2">
-          {navItems.map((item) => {
+          {items.map((item) => {
             const Icon = item.icon
             return (
               <NavLink
@@ -81,9 +82,7 @@ export function AppLayout() {
       <div className="flex-1 flex flex-col">
         <header className="bg-white/95 backdrop-blur-lg border-b border-slate-200 px-4 md:px-8 py-3 flex items-center justify-between shadow-sm">
           <div className="md:hidden flex items-center gap-2 font-semibold text-slate-900">
-            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-hq-teal to-emerald-400 text-white font-semibold flex items-center justify-center">
-              HQ
-            </div>
+            <img src={hqLogo} alt="HQ" className="h-9 w-9 rounded-full object-contain" />
             FinOps Console
           </div>
           <div className="hidden md:flex items-center gap-2 text-slate-600">

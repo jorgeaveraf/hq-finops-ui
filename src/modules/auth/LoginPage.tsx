@@ -6,6 +6,7 @@ import { Button } from '../../components/Button'
 import { TextField } from '../../components/TextField'
 import { Alert } from '../../components/Alert'
 import { useAuth } from './useAuth'
+import hqLogo from '../../assets/hq-logo.png'
 
 type LocationState = {
   from?: string
@@ -42,7 +43,10 @@ export function LoginPage() {
       await login(username, password)
       if (!remember) {
         // Avoid persisting across sessions when remember me is off.
-        sessionStorage.setItem('hq_finops_auth', '1')
+        const persisted = localStorage.getItem('hq_finops_auth')
+        if (persisted) {
+          sessionStorage.setItem('hq_finops_auth', persisted)
+        }
         localStorage.removeItem('hq_finops_auth')
       }
       navigate(from, { replace: true })
@@ -57,9 +61,7 @@ export function LoginPage() {
     <div className="min-h-screen bg-hq-gray flex items-center justify-center px-4">
       <div className="max-w-md w-full glass-card p-8">
         <div className="flex items-center gap-3 mb-6">
-          <div className="h-11 w-11 rounded-full bg-gradient-to-br from-hq-teal to-emerald-400 text-white font-semibold flex items-center justify-center">
-            HQ
-          </div>
+          <img src={hqLogo} alt="HQ" className="h-11 w-11 rounded-full object-contain" />
           <div>
             <p className="text-sm font-semibold" style={{ color: '#178a8a' }}>
               Headquarters
