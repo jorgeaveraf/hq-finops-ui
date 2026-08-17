@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { LogOut, UploadCloud, Home, Send, PlugZap } from 'lucide-react'
+import { LogOut, Home, PlugZap } from 'lucide-react'
 import { useAuth } from '../modules/auth/useAuth'
 import { Button } from '../components/Button'
 import { useHealthStatus } from '../hooks/useHealthStatus'
@@ -7,8 +7,6 @@ import hqLogo from '../assets/hq-logo.png'
 
 const navItems = [
   { to: '/', label: 'Overview', icon: Home },
-  { to: '/ingest/part1', label: 'Bank ingestion (Part 1)', icon: UploadCloud },
-  { to: '/ingest/part2', label: 'QBO export (Part 2)', icon: Send },
   { to: '/qbo/clients', label: 'Clients & Integrations', icon: PlugZap },
 ]
 

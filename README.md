@@ -1,6 +1,6 @@
 # Headquarters FinOps UI
 
-React + Vite + TypeScript frontend for orchestrating the HQ ingestion-gateway flows (Part 1 bank ingestion + Part 2 QBO export). Tailwind-driven styling follows the HQ teal palette with an internal-tool feel.
+React + Vite + TypeScript frontend for managing HQ QuickBooks clients and integrations. Tailwind-driven styling follows the HQ teal palette with an internal-tool feel.
 
 ## Quick start
 
@@ -43,20 +43,17 @@ All qbo-gateway calls go through `/qbo-api/*` so the Vite proxy injects `X-API-K
 
 - Clients & Integrations module hitting qbo-gateway via `/qbo-api` (list clients, view detail, create when supported, and trigger OAuth reconnect without exposing API keys).
 - Auth gate with `/login`, remember-me toggle, and sign-out from the header.
-- Protected routes: dashboard, Part 1 ingestion, Part 2 QBO export, and run details.
-- Form flows with CSV upload (multi-file), validation, and submission to ingestion-gateway.
-- Live polling via `/poll/{dag_run_id}?dag=part1|part2` with status badges and outputs.
+- Protected dashboard and administrator-only client management routes.
+- Ingestion gateway health status in the application sidebar.
 - Tailwind-based HQ look: teal primary, white cards, soft shadows.
 
 ## Project structure
 
 - `src/api` — Axios client + request/response types.
 - `src/modules/auth` — `AuthProvider`, `useAuth`, login page, and `RequireAuth`.
-- `src/modules/part1` / `src/modules/part2` — ingestion + export flows and status panels.
 - `src/modules/qbo` — qbo-gateway HTTP client, Clients & Integrations pages, and the OAuth reconnect UI.
 - `src/modules/dashboard` — overview cards and shortcuts.
-- `src/modules/runs` — optional run detail page with polling.
-- `src/hooks` — `usePolling` for DAG status.
+- `src/hooks` — ingestion gateway health status polling.
 - `src/components` — UI primitives (buttons, cards, alerts, dropzone, form fields, badges).
 - `src/layout` — app shell with sidebar nav and header.
 - `src/tests` — basic rendering/validation tests (Vitest + Testing Library).

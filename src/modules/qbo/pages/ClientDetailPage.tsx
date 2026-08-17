@@ -45,7 +45,8 @@ export function ClientDetailPage() {
   const credentialRealmId =
     client && Array.isArray((client as Record<string, unknown>).credentials)
       ? ((client as Record<string, unknown>).credentials as Array<Record<string, unknown>>).find(
-          (entry) => typeof entry.realm_id === 'string' && entry.realm_id.trim().length > 0,
+          (entry): entry is Record<string, unknown> & { realm_id: string } =>
+            typeof entry.realm_id === 'string' && entry.realm_id.trim().length > 0,
         )?.realm_id
       : undefined
   const resolvedRealmId = client?.realm_id || credentialRealmId
