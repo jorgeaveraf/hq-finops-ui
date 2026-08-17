@@ -82,7 +82,8 @@ jobs:
           archive="${GITHUB_SHA}.tar.gz"
           test -f dist/index.html
           tar -C dist -czf "$archive" .
-          tar -tzf "$archive" | grep -Eq '^(\./)?index\.html$'
+          tar -tzf "$archive" > archive-contents.txt
+          grep -Eq '^(\./)?index\.html$' archive-contents.txt
 
       - name: Configure SSH
         shell: bash
