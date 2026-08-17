@@ -1,0 +1,123 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build static site
+        run: npm run build
+
+  deploy:
+    name: Deploy production
+    if: github.ref == 'refs/heads/main'
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: hq-finops-ui-production
+      cancel-in-progress: false
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production static site
+        env:
+          VITE_INGESTION_API_BASE_URL: ${{ secrets.VITE_INGESTION_API_BASE_URL }}
+          VITE_APP_USERNAME: ${{ secrets.VITE_APP_USERNAME }}
+          VITE_APP_PASSWORD: ${{ secrets.VITE_APP_PASSWORD }}
+          VITE_ADMIN_USERNAME: ${{ secrets.VITE_ADMIN_USERNAME }}
+          VITE_ADMIN_PASSWORD: ${{ secrets.VITE_ADMIN_PASSWORD }}
+        run: npm run build
+
+      - name: Package static release
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${GITHUB_SHA}.tar.gz"
+          test -f dist/index.html
+          tar -C dist -czf "$archive" .
+          tar -tzf "$archive" | grep -Eq '^(\./)?index\.html$'
+
+      - name: Configure SSH
+        shell: bash
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp \
+            -i ~/.ssh/id_ed25519 \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            "${GITHUB_SHA}.tar.gz" \
+            "${VPS_USER}@${VPS_HOST}:/home/deploy/finops-staging/${GITHUB_SHA}.tar.gz"
+
+      - name: Activate release
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh \
+            -i ~/.ssh/id_ed25519 \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            "${VPS_USER}@${VPS_HOST}" \
+            "sudo -n /usr/local/sbin/deploy-finops-ui ${GITHUB_SHA}"
+
+      - name: Remove SSH key
+        if: always()
+        shell: bash
+        run: rm -f ~/.ssh/id_ed25519
