@@ -15,7 +15,6 @@ Then open http://localhost:5173. The login screen gates all other routes.
 
 Create a `.env` (or `.env.local`) if you need overrides:
 
-- `VITE_INGESTION_API_BASE_URL` (default: `http://localhost:8001`)
 - `VITE_APP_USERNAME` (default: `admin`)
 - `VITE_APP_PASSWORD` (default: `admin`)
 - `QBO_GATEWAY_BASE_URL` (proxy target for qbo-gateway; safe to set in `.env`)
@@ -44,16 +43,13 @@ All qbo-gateway calls go through `/qbo-api/*` so the Vite proxy injects `X-API-K
 - Clients & Integrations module hitting qbo-gateway via `/qbo-api` (list clients, view detail, create when supported, and trigger OAuth reconnect without exposing API keys).
 - Auth gate with `/login`, remember-me toggle, and sign-out from the header.
 - Protected dashboard and administrator-only client management routes.
-- Ingestion gateway health status in the application sidebar.
 - Tailwind-based HQ look: teal primary, white cards, soft shadows.
 
 ## Project structure
 
-- `src/api` — Axios client + request/response types.
 - `src/modules/auth` — `AuthProvider`, `useAuth`, login page, and `RequireAuth`.
 - `src/modules/qbo` — qbo-gateway HTTP client, Clients & Integrations pages, and the OAuth reconnect UI.
 - `src/modules/dashboard` — overview cards and shortcuts.
-- `src/hooks` — ingestion gateway health status polling.
 - `src/components` — UI primitives (buttons, cards, alerts, dropzone, form fields, badges).
 - `src/layout` — app shell with sidebar nav and header.
 - `src/tests` — basic rendering/validation tests (Vitest + Testing Library).
@@ -72,5 +68,4 @@ Expose env vars at build time by injecting them into a `.env` before `docker bui
 ## Notes
 
 - Design mirrors HQ marketing/success screens with a Fortune-500 internal console tone.
-- Outputs from polling are displayed as text placeholders; hook up real download links when the gateway exposes them.
-- All logic is client-side; ensure the ingestion-gateway is reachable at the configured base URL.
+- All application logic is client-side; qbo-gateway requests are routed through the configured `/qbo-api` proxy.
