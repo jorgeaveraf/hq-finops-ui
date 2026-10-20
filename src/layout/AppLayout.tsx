@@ -2,7 +2,6 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { LogOut, Home, PlugZap } from 'lucide-react'
 import { useAuth } from '../modules/auth/useAuth'
 import { Button } from '../components/Button'
-import { useHealthStatus } from '../hooks/useHealthStatus'
 import hqLogo from '../assets/hq-logo.png'
 
 const navItems = [
@@ -12,7 +11,6 @@ const navItems = [
 
 export function AppLayout() {
   const { user, logout, role } = useAuth()
-  const { status: healthStatus, message: healthMessage, lastChecked } = useHealthStatus()
   const items = role === 'admin' ? navItems : navItems.filter((item) => item.to !== '/qbo/clients')
 
   return (
@@ -49,32 +47,6 @@ export function AppLayout() {
             )
           })}
         </nav>
-        <div className="px-4 py-5 border-t border-slate-100">
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-            <p className="text-sm text-slate-600">Status</p>
-            <p
-              className={`text-xs font-semibold ${
-                healthStatus === 'healthy'
-                  ? 'text-emerald-700'
-                  : healthStatus === 'unreachable'
-                    ? 'text-rose-600'
-                    : 'text-slate-600'
-              }`}
-            >
-              {healthStatus === 'healthy'
-                ? 'Ingestion gateway reachable'
-                : healthStatus === 'unreachable'
-                  ? 'Gateway unreachable'
-                  : 'Checking...'}
-            </p>
-            <p className="text-xs text-slate-500">
-              {healthStatus === 'healthy' ? 'Ready for submissions' : healthMessage ?? 'Health probe via /health'}
-            </p>
-            {lastChecked && (
-              <p className="text-[11px] text-slate-400 mt-1">Checked {lastChecked.toLocaleTimeString()}</p>
-            )}
-          </div>
-        </div>
       </aside>
 
       <div className="flex-1 flex flex-col">
