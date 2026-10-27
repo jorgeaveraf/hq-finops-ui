@@ -128,7 +128,7 @@ export function ClientDetailPage() {
         <>
           <Card
             title={getClientName(client)}
-            description={<span className="-ml-0.5 inline-block max-w-full break-words rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{client.client_group ? `Client: ${formatClientGroup(client.client_group)}` : 'No client assigned'}</span>}
+            description={<span className="-ml-0.5 inline-flex w-max whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{client.client_group ? formatClientGroup(client.client_group) : 'No client assigned'}</span>}
             actions={<div className="flex items-center gap-2">{client.source === 'demo' && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">Demo data</span>}<span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${recordStatus === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>{recordStatusLabel}</span></div>}
           />
 
