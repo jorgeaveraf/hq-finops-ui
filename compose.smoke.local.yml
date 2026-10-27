@@ -1,0 +1,37 @@
+name: hq-finops-smoke-local
+services:
+  mock-gateway:
+    build:
+      context: ../hq-finops-api
+      dockerfile: Dockerfile.mock.local
+    networks: [backend]
+  api:
+    build:
+      context: ../hq-finops-api
+      dockerfile: Dockerfile.local
+    environment:
+      FINOPS_GATEWAY_BASE_URL: http://mock-gateway:8000
+      FINOPS_GATEWAY_API_KEY: local-mock-key
+      FINOPS_ALLOWED_ORIGIN: http://localhost:5174
+      FINOPS_ADMIN_USERNAME: sandbox-admin
+      # Local fixture password only; never use this hash outside development.
+      FINOPS_ADMIN_PASSWORD_HASH: scrypt:486611327e04751f35b7877eb8f32652:67c36474e36872ca963fc0f17ab965a23357436667a1c2f4b01bd5cbe1c25b06be2633d0963598d229d4baffaa83769767c378e2a439876620a50948502d4595
+      FINOPS_ALLOWED_ENVIRONMENTS: sandbox
+      FINOPS_LOCAL_ONLY: 'true'
+      FINOPS_SECURE_COOKIES: 'false'
+    depends_on: [mock-gateway]
+    networks: [backend]
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    environment:
+      FINOPS_API_PROXY_TARGET: http://api:3000
+    depends_on: [api]
+    ports:
+      - '127.0.0.1:5174:5173'
+    networks: [backend, web-access]
+networks:
+  backend:
+    internal: true
+  web-access:

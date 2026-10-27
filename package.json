@@ -9,6 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:docker": "node local/run-docker-smoke.mjs",
+    "mock:mixed": "node local/set-local-mock-mode.mjs mixed",
+    "mock:all-connected": "node local/set-local-mock-mode.mjs all-connected",
     "test:watch": "vitest"
   },
   "dependencies": {

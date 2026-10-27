@@ -1,107 +1,55 @@
-import type { QboClient, QboEnvironment } from './api/qboGatewayClient'
-
-export function getClientName(client: QboClient) {
-  return client.label || client.name || getClientId(client)
-}
-
-export function getClientEnvironments(client: QboClient): (QboEnvironment | string)[] {
-  if (Array.isArray(client.environments) && client.environments.length > 0) {
-    return client.environments
-  }
-
-  if (client.environment) {
-    return [client.environment]
-  }
-
-  const metadataEnv =
-    typeof client.metadata === 'object' && client.metadata !== null
-      ? ((client.metadata.env || client.metadata.tier) as string | undefined)
-      : undefined
-  if (metadataEnv) {
-    return [metadataEnv]
-  }
-
-  const envFromAltField = (client as Record<string, unknown>).env
-  if (typeof envFromAltField === 'string') {
-    return [envFromAltField]
-  }
-
-  return []
-}
-
-export function getClientStatus(client: QboClient) {
-  return String(client.access_status || client.status || client.connection_status || 'unknown')
-}
+import type { QboClient, QboConnection, QboEnvironment } from './api/qboGatewayClient'
 
 export function getClientId(client: QboClient) {
-  return client.client_id || client.id || ''
+  return client.id
+}
+
+export function getClientName(client: QboClient) {
+  return client.name || client.id
+}
+
+export function formatClientGroup(clientGroup: string | null | undefined) {
+  if (!clientGroup) return 'No client assigned'
+  return clientGroup.split('_').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+}
+
+export function toClientGroup(name: string) {
+  return name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+}
+
+export function getClientRecordStatus(client: QboClient) {
+  const metadataStatus = typeof client.metadata?.status === 'string' ? client.metadata.status : null
+  return (metadataStatus || client.status || 'unknown').trim().toLowerCase()
+}
+
+export function getClientEnvironments(client: QboClient): QboEnvironment[] {
+  const fromConnections = client.connections?.map((connection) => connection.environment) || []
+  const fromList = client.environments || []
+  const tier = client.metadata?.tier
+  const fromMetadata: QboEnvironment[] = tier === 'sandbox' || tier === 'prod' ? [tier] : []
+  return [...new Set([...fromConnections, ...fromList, ...fromMetadata])]
 }
 
 export type ConnectionStatus = {
-  label: 'Connected' | 'Expired' | 'Disconnected'
+  label: 'Connected' | 'Reconnect needed' | 'Unavailable'
   tone: 'success' | 'warning' | 'neutral'
+  reason?: 'Not checked' | 'Disconnected'
 }
 
-export function getConnectionStatus(client: QboClient): ConnectionStatus {
-  const normalized = (value?: unknown) =>
-    typeof value === 'string' ? value.trim().toLowerCase() : value ? String(value).toLowerCase() : ''
-
-  const accessStatus = normalized(client.access_status)
-  const connStatus = normalized(client.connection_status)
-  const tokenStatus = normalized((client as Record<string, unknown>).token_status)
-  const authStatus = normalized((client as Record<string, unknown>).auth_status)
-  const hasCredentials = Boolean((client as Record<string, unknown>).has_credentials)
-
-  const hasRealm = Boolean((client as Record<string, unknown>).realm_id || client.realm_id)
-  const hasTokens =
-    Boolean((client as Record<string, unknown>).access_token) ||
-    Boolean((client as Record<string, unknown>).refresh_token) ||
-    Boolean((client as Record<string, unknown>).connected_at)
-
-  const expiresAtRaw =
-    (client as Record<string, unknown>).access_expires_at ||
-    (client as Record<string, unknown>).expires_at ||
-    (client as Record<string, unknown>).token_expires_at
-  const expiresAt = typeof expiresAtRaw === 'string' ? new Date(expiresAtRaw) : null
-  const isExpiredDate = expiresAt ? expiresAt.getTime() < Date.now() : false
-
-  const hasErrorHint = normalized((client as Record<string, unknown>).last_error)?.includes('expire')
-
-  const statuses = [accessStatus, connStatus, tokenStatus, authStatus].filter(Boolean)
-  const explicitConnected = statuses.some((s) => ['connected', 'active', 'valid', 'ok'].includes(s))
-  const explicitExpired = statuses.some((s) => ['expired', 'invalid', 'revoked'].includes(s))
-
-  if (accessStatus === 'none' && !hasCredentials && !hasRealm && !hasTokens) {
-    return { label: 'Disconnected', tone: 'neutral' }
+export function getConnectionStatus(connection?: QboConnection): ConnectionStatus {
+  if (!connection?.connection_checked_at || connection.is_connected === null) {
+    return { label: 'Unavailable', tone: 'neutral', reason: 'Not checked' }
   }
+  return connection.is_connected
+    ? { label: 'Connected', tone: 'success' }
+    : { label: 'Reconnect needed', tone: 'warning', reason: 'Disconnected' }
+}
 
-  if (accessStatus !== 'none' && Array.isArray((client as Record<string, unknown>).credentials)) {
-    const creds = (client as Record<string, unknown>).credentials as Array<Record<string, unknown>>
-    const refreshDates = creds
-      .map((c) => (typeof c.refresh_expires_at === 'string' ? new Date(c.refresh_expires_at) : null))
-      .filter((d): d is Date => !!d)
-    if (refreshDates.length > 0) {
-      const maxRefresh = refreshDates.reduce((latest, current) =>
-        current.getTime() > latest.getTime() ? current : latest,
-      )
-      if (maxRefresh.getTime() >= Date.now()) {
-        return { label: 'Connected', tone: 'success' }
-      }
-      return { label: 'Expired', tone: 'warning' }
-    }
-  }
-
-  if (accessStatus === 'expired' || explicitExpired || isExpiredDate || hasErrorHint) {
-    return { label: 'Expired', tone: 'warning' }
-  }
-
-  if (explicitConnected || accessStatus === 'active' || connStatus === 'connected') {
-    return { label: 'Connected', tone: 'success' }
-  }
-
-  if ((hasCredentials || hasRealm || hasTokens) && !isExpiredDate) {
-    return { label: 'Connected', tone: 'success' }
-  }
-
-  return { label: 'Disconnected', tone: 'neutral' }
+export function formatCheckedAt(checkedAt: string | null | undefined) {
+  if (!checkedAt) return 'No review recorded'
+  const date = new Date(checkedAt)
+  return Number.isNaN(date.getTime()) ? 'No review recorded' : date.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+  })
 }

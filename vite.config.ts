@@ -1,26 +1,16 @@
 import { defineConfig } from 'vitest/config'
-import { loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
-  const qboGatewayBaseUrl = env.QBO_GATEWAY_BASE_URL || 'http://127.0.0.1:8000'
-  const qboGatewayApiKey = env.QBO_GATEWAY_API_KEY
-
+export default defineConfig(() => {
   return {
     base: '/automations/',
     plugins: [react()],
     server: {
       proxy: {
-        '/qbo-api': {
-          target: qboGatewayBaseUrl,
+        '/automations/api': {
+          target: process.env.FINOPS_API_PROXY_TARGET || 'http://127.0.0.1:3000',
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/qbo-api/, ''),
-          headers: {
-            ...(qboGatewayApiKey ? { 'X-API-Key': qboGatewayApiKey } : {}),
-            Accept: 'application/json',
-          },
         },
       },
     },
@@ -28,6 +18,7 @@ export default defineConfig(({ mode }) => {
       globals: true,
       environment: 'jsdom',
       setupFiles: './src/setupTests.ts',
+      include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     },
   }
 })
