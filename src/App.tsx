@@ -32,8 +32,9 @@ function App() {
           >
             <Route index element={<DashboardPage />} />
             <Route element={<RequireAdmin />}>
-              <Route path="/qbo/clients" element={<ClientListPage />} />
-              <Route path="/qbo/clients/new" element={<CreateClientPage />} />
+              <Route path="/qbo/clients" element={<ClientListPage />}>
+                <Route path="new" element={<CreateClientPage />} />
+              </Route>
               <Route path="/qbo/clients/:clientId" element={<ClientDetailPage />} />
             </Route>
           </Route>
