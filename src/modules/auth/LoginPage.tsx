@@ -13,14 +13,13 @@ type LocationState = {
 }
 
 export function LoginPage() {
-  const { login, expectedUsername, isAuthenticated } = useAuth()
+  const { login, isAuthenticated } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as LocationState | undefined)?.from || '/'
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [remember, setRemember] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -41,14 +40,6 @@ export function LoginPage() {
     setIsSubmitting(true)
     try {
       await login(username, password)
-      if (!remember) {
-        // Avoid persisting across sessions when remember me is off.
-        const persisted = localStorage.getItem('hq_finops_auth')
-        if (persisted) {
-          sessionStorage.setItem('hq_finops_auth', persisted)
-        }
-        localStorage.removeItem('hq_finops_auth')
-      }
       navigate(from, { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to sign in')
@@ -84,7 +75,7 @@ export function LoginPage() {
           <TextField
             label="Username"
             name="username"
-            placeholder={`e.g. ${expectedUsername}`}
+            placeholder="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
@@ -108,16 +99,6 @@ export function LoginPage() {
               </button>
             }
           />
-
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-hq-teal focus:ring-hq-teal accent-[#0f6d6d]"
-            />
-            Remember me on this device
-          </label>
 
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? 'Signing in...' : 'Sign in'}

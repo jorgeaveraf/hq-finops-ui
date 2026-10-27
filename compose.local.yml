@@ -1,0 +1,25 @@
+name: hq-finops-ui-local
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    environment:
+      FINOPS_API_PROXY_TARGET: http://api:3000
+    ports:
+      - '127.0.0.1:5173:5173'
+    networks: [backend, web-access]
+  oauth-return:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./local/oauth-return.mjs:/app/oauth-return.mjs:ro
+    command: ["node", "/app/oauth-return.mjs"]
+    ports:
+      - '127.0.0.1:8080:8080'
+    networks: [web-access]
+networks:
+  backend:
+    external: true
+    name: hq-finops-local-backend
+  web-access:

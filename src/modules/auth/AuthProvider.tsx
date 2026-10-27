@@ -1,87 +1,54 @@
-import { createContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
-
-type AuthContextValue = {
-  user: { name: string; email: string } | null
-  role: 'admin' | 'operator' | null
-  isAuthenticated: boolean
-  login: (username: string, password: string) => Promise<void>
-  logout: () => void
-  expectedUsername: string
-}
-
-const AUTH_KEY = 'hq_finops_auth'
-
-export const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+import { useEffect, useMemo, useState, type PropsWithChildren } from 'react'
+import { apiRequest, setCsrfToken } from '../../api/finopsApi'
+import { AuthContext, type Session } from './AuthContext'
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const expectedUsername = String(import.meta.env.VITE_APP_USERNAME || '')
-  const expectedPassword = String(import.meta.env.VITE_APP_PASSWORD || '')
-  const adminUsername = String(import.meta.env.VITE_ADMIN_USERNAME || '')
-  const adminPassword = String(import.meta.env.VITE_ADMIN_PASSWORD || '')
-  const [user, setUser] = useState<{ name: string; email: string } | null>(null)
-  const [role, setRole] = useState<'admin' | 'operator' | null>(null)
+  const [user, setUser] = useState<Session['user'] | null>(null)
+  const [role, setRole] = useState<Session['role'] | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const stored = localStorage.getItem(AUTH_KEY) || sessionStorage.getItem(AUTH_KEY)
-    if (stored === 'admin') {
-      setRole('admin')
-      setUser({
-        name: 'Admin',
-        email: adminUsername || 'admin',
+    let active = true
+    apiRequest<Session>('/session')
+      .then((session) => {
+        if (!active) return
+        setUser(session.user)
+        setRole(session.role)
+        setCsrfToken(session.csrf)
       })
-      return
-    }
-    if (stored === 'operator' || stored === '1') {
-      setRole('operator')
-      setUser({
-        name: 'FinOps Operator',
-        email: `${expectedUsername}`,
+      .catch(() => {
+        if (!active) return
+        setUser(null)
+        setRole(null)
+        setCsrfToken(null)
       })
-    }
-  }, [adminUsername, expectedUsername])
+      .finally(() => {
+        if (active) setIsLoading(false)
+      })
+    return () => { active = false }
+  }, [])
 
   const login = async (username: string, password: string) => {
-    if (adminUsername && adminPassword && username === adminUsername && password === adminPassword) {
-      setRole('admin')
-      setUser({
-        name: 'Admin',
-        email: adminUsername,
-      })
-      localStorage.setItem(AUTH_KEY, 'admin')
-      return
-    }
-    if (expectedUsername && expectedPassword && username === expectedUsername && password === expectedPassword) {
-      setRole('operator')
-      setUser({
-        name: 'FinOps Operator',
-        email: `${username}`,
-      })
-      localStorage.setItem(AUTH_KEY, 'operator')
-      return
-    }
-    throw new Error('Invalid credentials')
+    const session = await apiRequest<Session>('/session', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    })
+    setUser(session.user)
+    setRole(session.role)
+    setCsrfToken(session.csrf)
   }
 
-  const logout = () => {
-    localStorage.removeItem(AUTH_KEY)
-    sessionStorage.removeItem(AUTH_KEY)
+  const logout = async () => {
+    await apiRequest('/session', { method: 'DELETE' })
+    setCsrfToken(null)
     setUser(null)
     setRole(null)
-    const base = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
-    window.location.replace(`${base}login`)
+    window.location.replace(`${import.meta.env.BASE_URL}login`)
   }
 
   const value = useMemo(
-    () => ({
-      user,
-      role,
-      isAuthenticated: Boolean(user),
-      login,
-      logout,
-      expectedUsername,
-    }),
-    [user, role, expectedUsername],
+    () => ({ user, role, isAuthenticated: Boolean(user), isLoading, login, logout }),
+    [user, role, isLoading],
   )
-
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

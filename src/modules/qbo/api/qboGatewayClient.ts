@@ -1,26 +1,32 @@
+import { apiRequest } from '../../../api/finopsApi'
+
 export type QboEnvironment = 'prod' | 'sandbox'
+export type QboConnectionState = 'connected' | 'reconnect-needed' | 'unavailable'
+
+export type QboConnection = {
+  environment: QboEnvironment
+  is_connected: boolean | null
+  connection_checked_at: string | null
+  realm_id: string | null
+}
 
 export type QboClient = {
-  client_id?: string
-  id?: string
-  label?: string
-  name?: string
-  environment?: QboEnvironment | string
-  environments?: (QboEnvironment | string)[]
-  connection_status?: string
-  status?: string
-  access_status?: string
-  access_expires_at?: string | null
-  has_credentials?: boolean
-  realm_id?: string
-  metadata?: Record<string, unknown>
-  [key: string]: unknown
+  id: string
+  source?: 'demo'
+  name: string
+  client_group: string | null
+  status: string
+  created_at?: string | null
+  metadata: Record<string, unknown> | null
+  environments: QboEnvironment[]
+  connections?: QboConnection[]
+  connection_state?: QboConnectionState
 }
 
 export type CreateClientPayload = {
-  label: string
+  entityName: string
+  clientGroup: string
   environment: QboEnvironment
-  realm_id?: string
   extraFields?: Record<string, unknown>
 }
 
@@ -30,144 +36,42 @@ export type QboReconnectResponse = {
   redirect_url?: string
   message?: string
   request_id?: string
-  [key: string]: unknown
 }
 
-export class QboGatewayError extends Error {
-  status: number
-  body: string
-  parsedBody?: unknown
-
-  constructor(status: number, body: string, parsedBody?: unknown) {
-    super(
-      typeof parsedBody === 'object' && parsedBody !== null && 'message' in parsedBody
-        ? String((parsedBody as Record<string, unknown>).message)
-        : `Gateway request failed with status ${status}`,
-    )
-    this.name = 'QboGatewayError'
-    this.status = status
-    this.body = body
-    this.parsedBody = parsedBody
-  }
+export async function fetchReconnectLink(params: { clientId: string; environment: QboEnvironment | string }) {
+  const query = new URLSearchParams({ environment: params.environment })
+  return apiRequest<QboReconnectResponse>(`/clients/${params.clientId}/reconnect?${query}`)
 }
 
-const API_PREFIX = '/qbo-api'
-
-function withIdempotency(headers?: HeadersInit): HeadersInit {
-  const normalizedHeaders: Record<string, string> = {}
-
-  if (headers instanceof Headers) {
-    headers.forEach((value, key) => {
-      normalizedHeaders[key] = value
-    })
-  } else if (Array.isArray(headers)) {
-    for (const [key, value] of headers) {
-      normalizedHeaders[key] = value
-    }
-  } else if (headers) {
-    Object.assign(normalizedHeaders, headers)
-  }
-
-  return {
-    ...normalizedHeaders,
-    'Idempotency-Key': crypto.randomUUID(),
-  }
-}
-
-async function qboRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const method = (init?.method ?? 'GET').toUpperCase()
-  const initHeaders =
-    method === 'POST' || method === 'PATCH' || method === 'DELETE'
-      ? withIdempotency(init?.headers)
-      : init?.headers
-  const response = await fetch(`${API_PREFIX}${path}`, {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(initHeaders ?? {}),
-    },
-  })
-  const bodyText = await response.text()
-
-  let parsedBody: unknown
-  if (bodyText) {
-    try {
-      parsedBody = JSON.parse(bodyText)
-    } catch {
-      parsedBody = undefined
-    }
-  }
-
-  if (!response.ok) {
-    throw new QboGatewayError(response.status, bodyText || 'Gateway request failed', parsedBody)
-  }
-
-  if (!bodyText) {
-    return {} as T
-  }
-
-  if (parsedBody === undefined) {
-    throw new Error('Gateway response was not valid JSON.')
-  }
-
-  return parsedBody as T
-}
-
-type ReconnectParams = {
-  clientId: string
-  environment: QboEnvironment | string
-}
-
-export async function fetchReconnectLink(params: ReconnectParams): Promise<QboReconnectResponse> {
-  const searchParams = new URLSearchParams({
-    client_id: params.clientId,
-    env: params.environment,
-  })
-  return qboRequest<QboReconnectResponse>(`/auth/connect?${searchParams.toString()}`)
-}
-
-export async function listClients(): Promise<QboClient[]> {
-  return qboRequest<QboClient[]>('/clients?summary=1')
+export async function listClients(clientGroup?: string, includeConnectionStatus = false): Promise<QboClient[]> {
+  const params = new URLSearchParams()
+  if (clientGroup) params.set('client_group', clientGroup)
+  if (includeConnectionStatus) params.set('connection_status', '1')
+  const query = params.size ? `?${params}` : ''
+  return apiRequest<QboClient[]>(`/clients${query}`)
 }
 
 export async function getClient(clientId: string): Promise<QboClient> {
-  return qboRequest<QboClient>(`/clients/${clientId}`)
+  return apiRequest<QboClient>(`/clients/${clientId}`)
 }
 
 export async function deleteClient(clientId: string): Promise<void> {
-  await qboRequest<void>(`/clients/${clientId}`, {
-    method: 'DELETE',
-  })
+  await apiRequest(`/clients/${clientId}`, { method: 'DELETE' })
 }
 
-export async function createClient(payload: CreateClientPayload): Promise<QboClient> {
-  const metadata = {
-    ...(payload.extraFields ?? {}),
-    tier: payload.environment,
-  }
-
-  const body: Record<string, unknown> = {
-    name: payload.label,
-    label: payload.label,
-    status: 'active',
-    metadata,
-    ...(payload.realm_id ? { realm_id: payload.realm_id } : {}),
-  }
-
-  return qboRequest<QboClient>('/clients', {
+export async function createClient(payload: CreateClientPayload, idempotencyKey: string = crypto.randomUUID()): Promise<QboClient> {
+  return apiRequest<QboClient>('/clients', {
     method: 'POST',
-    body: JSON.stringify(body),
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({
+      name: payload.entityName,
+      client_group: payload.clientGroup,
+      metadata: { ...(payload.extraFields || {}), tier: payload.environment },
+    }),
   })
 }
 
-export function describeGatewayError(error: unknown, fallback = 'Unable to reach qbo-gateway') {
-  if (error instanceof QboGatewayError) {
-    if (error.status === 401) return 'qbo-gateway rejected the API key (401).'
-    if (error.status === 404) return 'Not found on qbo-gateway (404).'
-    if (error.status >= 500) return 'qbo-gateway returned a server error. Please retry.'
-    return error.message
-  }
+export function describeGatewayError(error: unknown, fallback = 'Unable to reach FinOps API') {
   if (error instanceof Error) return error.message
   return fallback
 }
