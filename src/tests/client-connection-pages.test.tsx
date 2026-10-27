@@ -93,7 +93,7 @@ describe('FinOps client connection display', () => {
       </MemoryRouter>,
     )
     const reload = await screen.findByRole('button', { name: 'Reload saved status' })
-    expect(screen.getByText('Client: Sample Group', { selector: 'span' })).toHaveClass('rounded-full')
+    expect(screen.getByText('Sample Group', { selector: 'span' })).toHaveClass('rounded-full', 'w-max', 'whitespace-nowrap')
     expect(screen.getByText('Entity ID').parentElement).toHaveTextContent(id)
     fireEvent.click(screen.getByText('Technical details', { selector: 'span' }))
     expect(screen.getByText('Realm ID').parentElement).toHaveTextContent('9341455571857172')
@@ -334,7 +334,7 @@ describe('FinOps client connection display', () => {
     expect(screen.getByText('Reconnect QuickBooks', { selector: 'summary' })).toHaveClass('hover:bg-hq-teal/5')
     expect(screen.getByRole('heading', { name: 'Sample client A' })).toBeInTheDocument()
     expect(screen.getByText('Active entity')).toBeInTheDocument()
-    expect(screen.getByText('Client: Sample Group', { selector: 'span' })).toHaveClass('rounded-full')
+    expect(screen.getByText('Sample Group', { selector: 'span' })).toHaveClass('rounded-full', 'w-max', 'whitespace-nowrap')
     const connectionInfo = screen.getByRole('button', { name: 'About QuickBooks connection' })
     fireEvent.focus(connectionInfo)
     expect(screen.getByRole('tooltip')).toHaveTextContent('QuickBooks connection status and authorization options for this entity.')
