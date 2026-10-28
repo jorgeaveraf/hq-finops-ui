@@ -20,8 +20,7 @@ export function toClientGroup(name: string) {
 }
 
 export function getClientRecordStatus(client: QboClient) {
-  const metadataStatus = typeof client.metadata?.status === 'string' ? client.metadata.status : null
-  return (metadataStatus || client.status || 'unknown').trim().toLowerCase()
+  return (client.status || 'unknown').trim().toLowerCase()
 }
 
 export function getClientEnvironments(client: QboClient): QboEnvironment[] {

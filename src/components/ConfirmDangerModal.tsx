@@ -8,6 +8,7 @@ type Props = {
   title: string
   description?: string
   confirmLabel?: string
+  confirmingLabel?: string
   cancelLabel?: string
   confirmText?: string
   confirmTextLabel?: string
@@ -22,6 +23,7 @@ export function ConfirmDangerModal({
   title,
   description,
   confirmLabel = 'Delete',
+  confirmingLabel = 'Deleting...',
   cancelLabel = 'Cancel',
   confirmText,
   confirmTextLabel = 'Type to confirm',
@@ -108,7 +110,7 @@ export function ConfirmDangerModal({
             variant={danger ? 'danger' : 'primary'}
             className={clsx(danger ? 'shadow-none focus:ring-rose-500/30' : '')}
           >
-            {isConfirming ? 'Deleting...' : confirmLabel}
+            {isConfirming ? confirmingLabel : confirmLabel}
           </Button>
         </div>
     </dialog>

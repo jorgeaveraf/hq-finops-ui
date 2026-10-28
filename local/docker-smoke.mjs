@@ -106,6 +106,30 @@ assert.deepEqual(body.connections.map((connection) => ({
 assert.equal('credentials' in body, false)
 assert.equal(body.client_group, 'sample_group')
 
+const statusPath = `${base}/automations/api/clients/${acmeId}`
+const statusHeaders = { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }
+try {
+  const deactivated = await fetch(statusPath, {
+    method: 'PATCH', headers: statusHeaders, body: JSON.stringify({ status: 'inactive' }),
+  })
+  assert.equal(deactivated.status, 200)
+  assert.equal((await deactivated.json()).status, 'inactive')
+  const inactiveDetail = await fetch(statusPath, { headers: { Cookie: cookie } })
+  assert.equal(inactiveDetail.status, 200)
+  const inactiveBody = await inactiveDetail.json()
+  assert.equal(inactiveBody.status, 'inactive')
+  assert.deepEqual(inactiveBody.connections, body.connections)
+  const inactiveOverview = await fetch(`${base}/automations/api/overview`, { headers: { Cookie: cookie } })
+  assert.equal(inactiveOverview.status, 200)
+  assert.equal((await inactiveOverview.json()).activeClients, 23)
+} finally {
+  const reactivated = await fetch(statusPath, {
+    method: 'PATCH', headers: statusHeaders, body: JSON.stringify({ status: 'active' }),
+  })
+  assert.equal(reactivated.status, 200)
+  assert.equal((await reactivated.json()).status, 'active')
+}
+
 async function connectionFor(clientId) {
   const response = await fetch(`${base}/automations/api/clients/${clientId}`, { headers: { Cookie: cookie } })
   assert.equal(response.status, 200)
@@ -146,4 +170,4 @@ assert.deepEqual(await clearOverview.json(), {
 const restoredDetail = await fetch(`${base}/automations/api/clients/${errorId}`, { headers: { Cookie: cookie } })
 assert.equal(restoredDetail.status, 200)
 
-process.stdout.write('Docker sandbox smoke: 24 synthetic entities in 15 groups, no mock authorization, mixed states and all-connected state verified.\n')
+process.stdout.write('Docker sandbox smoke: 24 synthetic entities in 15 groups, reversible status PATCH, no mock authorization, mixed states and all-connected state verified.\n')

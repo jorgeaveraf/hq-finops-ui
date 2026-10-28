@@ -314,7 +314,10 @@ describe('FinOps client connection display', () => {
     render(<MemoryRouter><ClientListPage /></MemoryRouter>)
     expect(await screen.findByText('Inactive entity')).toBeInTheDocument()
     expect(screen.queryByText('Status: Active')).not.toBeInTheDocument()
-    await waitFor(() => expect(screen.getAllByText('Connected')).toHaveLength(2))
+    await waitFor(() => expect(screen.getAllByText('Connected')).toHaveLength(1))
+    expect(screen.getByText('Monitoring paused')).toBeInTheDocument()
+    chooseFilter('QuickBooks connection', 'Connected')
+    expect(screen.queryByText('Inactive entity')).not.toBeInTheDocument()
   })
 
   it('places the saved review in client detail and keeps reconnect secondary', async () => {
@@ -362,6 +365,54 @@ describe('FinOps client connection display', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reconnect QuickBooks' }))
     await waitFor(() => expect(popup.replace).toHaveBeenCalledWith('https://example.com/authorize'))
     expect(screen.queryByRole('link', { name: 'Open QuickBooks' })).not.toBeInTheDocument()
+  })
+
+  it('deactivates and reactivates one entity without deleting it or using metadata status', async () => {
+    let saved = { ...detail, metadata: { tier: 'sandbox', status: 'active' } }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      if (init?.method === 'PATCH') {
+        saved = { ...saved, status: JSON.parse(String(init.body)).status }
+        return new Response(JSON.stringify(saved), { status: 200 })
+      }
+      return new Response(JSON.stringify(saved), { status: 200 })
+    })
+    render(
+      <MemoryRouter initialEntries={[`/qbo/clients/${id}`]}>
+        <Routes><Route path="/qbo/clients/:clientId" element={<ClientDetailPage />} /></Routes>
+      </MemoryRouter>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Deactivate entity' }))
+    expect(screen.getByRole('dialog', { name: 'Deactivate entity?' })).toHaveTextContent('both prod and sandbox')
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(false)
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Deactivate entity?' })).getByRole('button', { name: 'Deactivate entity' }))
+    await waitFor(() => expect(screen.getByText('Inactive entity')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Activate entity' })).toHaveFocus())
+    expect(screen.getByText(/Connection details below are the last saved values/)).toBeInTheDocument()
+    expect(screen.queryByText('Reconnect QuickBooks', { selector: 'summary' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete entity' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Activate entity' }))
+    await waitFor(() => expect(screen.getByText('Active entity')).toBeInTheDocument())
+    expect(screen.getByText('Reconnect QuickBooks', { selector: 'summary' })).toBeInTheDocument()
+    const patches = fetchMock.mock.calls.filter(([, init]) => init?.method === 'PATCH')
+    expect(patches).toHaveLength(2)
+    expect(patches.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([{ status: 'inactive' }, { status: 'active' }])
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)
+  })
+
+  it('keeps an entity active when deactivation fails', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => init?.method === 'PATCH'
+      ? new Response(JSON.stringify({ message: 'Gateway unavailable' }), { status: 502 })
+      : new Response(JSON.stringify(detail), { status: 200 }))
+    render(
+      <MemoryRouter initialEntries={[`/qbo/clients/${id}`]}>
+        <Routes><Route path="/qbo/clients/:clientId" element={<ClientDetailPage />} /></Routes>
+      </MemoryRouter>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Deactivate entity' }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Deactivate entity?' })).getByRole('button', { name: 'Deactivate entity' }))
+    expect(await screen.findByText('Gateway unavailable')).toBeInTheDocument()
+    expect(screen.getByText('Active entity')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete entity' })).toBeInTheDocument()
   })
 
   it('shows an unchecked credential as unknown in the detail', async () => {
