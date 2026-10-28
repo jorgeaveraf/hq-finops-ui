@@ -434,7 +434,7 @@ function EntityRow({ entity }: { entity: QboClient }) {
   const entityId = getClientId(entity)
   const recordStatus = getClientRecordStatus(entity)
   const kind: QboConnectionState = entity.connection_state ?? 'unavailable'
-  const status = recordStatus === 'inactive' ? { label: 'Monitoring paused', tone: 'neutral' }
+  const status = recordStatus === 'inactive' ? { label: 'Unavailable', tone: 'neutral' }
     : kind === 'connected' ? { label: 'Connected', tone: 'success' }
     : kind === 'reconnect-needed' ? { label: 'Reconnect needed', tone: 'warning' }
       : { label: 'Unavailable', tone: 'neutral' }
