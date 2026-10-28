@@ -12,17 +12,17 @@ const mfny: QboClient = {
 }
 
 describe('client display labels', () => {
-  it('shows the existing MFNY values without changing the entity data', () => {
+  it('shows the saved entity name and the MFNY client alias separately', () => {
     expect(formatClientGroup(mfny.client_group)).toBe('MFNY')
-    expect(getClientName(mfny)).toBe('MFNY')
+    expect(getClientName(mfny)).toBe('mfny_1')
     expect(mfny.name).toBe('mfny_1')
     expect(mfny.client_group).toBe('mfny_1')
   })
 
-  it('shows the future lowercase database values as MFNY', () => {
+  it('shows the lowercase database entity name and the MFNY client alias', () => {
     const renamed = { ...mfny, name: 'mfny', client_group: 'mfny' }
     expect(formatClientGroup(renamed.client_group)).toBe('MFNY')
-    expect(getClientName(renamed)).toBe('MFNY')
+    expect(getClientName(renamed)).toBe('mfny')
     expect(renamed.name).toBe('mfny')
     expect(renamed.client_group).toBe('mfny')
   })

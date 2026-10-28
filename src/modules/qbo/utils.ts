@@ -5,7 +5,6 @@ export function getClientId(client: QboClient) {
 }
 
 export function getClientName(client: QboClient) {
-  if (client.id === '1fec4592-e81b-45b1-97e2-8a1e27e87e89' && (client.name === 'mfny' || client.name === 'mfny_1')) return 'MFNY'
   return client.name || client.id
 }
 
