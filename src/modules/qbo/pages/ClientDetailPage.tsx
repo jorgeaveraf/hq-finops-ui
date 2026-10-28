@@ -6,7 +6,7 @@ import { Button } from '../../../components/Button'
 import { Card } from '../../../components/Card'
 import { ConfirmDangerModal } from '../../../components/ConfirmDangerModal'
 import { InfoTooltip } from '../../../components/InfoTooltip'
-import { deleteClient, describeGatewayError, getClient } from '../api/qboGatewayClient'
+import { deleteClient, describeGatewayError, getClient, updateClientStatus } from '../api/qboGatewayClient'
 import type { QboClient } from '../api/qboGatewayClient'
 import { formatCheckedAt, formatClientGroup, getClientEnvironments, getClientId, getClientName, getClientRecordStatus, getConnectionStatus } from '../utils'
 import { ReconnectButton } from '../components/ReconnectButton'
@@ -23,6 +23,11 @@ export function ClientDetailPage() {
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null)
   const [refreshVersion, setRefreshVersion] = useState(0)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false)
+  const [isChangingStatus, setIsChangingStatus] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const statusActionRef = useRef<HTMLButtonElement>(null)
   const authorizationStartedAt = useRef<number | null>(null)
 
   useEffect(() => {
@@ -68,6 +73,9 @@ export function ClientDetailPage() {
   const clientIdentifier = client ? getClientId(client) : ''
   const recordStatus = client ? getClientRecordStatus(client) : 'unknown'
   const recordStatusLabel = recordStatus === 'active' ? 'Active entity' : recordStatus === 'inactive' ? 'Inactive entity' : 'Entity status unavailable'
+  useEffect(() => {
+    if (statusMessage) statusActionRef.current?.focus()
+  }, [statusMessage])
   const connectionRows = environmentOptions.map((environment) => {
     const credential = client?.connections?.find((entry) => entry.environment === environment)
     return { environment, credential, status: getConnectionStatus(credential) }
@@ -86,6 +94,23 @@ export function ClientDetailPage() {
     } finally {
       setIsDeleting(false)
       setShowDeleteModal(false)
+    }
+  }
+
+  const handleStatusChange = async (status: 'active' | 'inactive') => {
+    if (!clientId || isChangingStatus) return
+    setStatusError(null)
+    setStatusMessage(null)
+    setIsChangingStatus(true)
+    try {
+      const updated = await updateClientStatus(clientId, status)
+      setClient((current) => current ? { ...current, status: updated.status } : current)
+      setStatusMessage(status === 'inactive' ? 'Entity deactivated. Future connection checks and notifications are paused.' : 'Entity activated. It will be checked on the next run.')
+    } catch (err) {
+      setStatusError(describeGatewayError(err, 'Unable to change entity status right now.'))
+    } finally {
+      setIsChangingStatus(false)
+      setShowDeactivateModal(false)
     }
   }
 
@@ -119,6 +144,8 @@ export function ClientDetailPage() {
 
       {error && <Alert title="Error" description={error} variant="error" />}
       {deleteError && <Alert title="Delete failed" description={deleteError} variant="error" />}
+      {statusError && <Alert title="Status change failed" description={statusError} variant="error" />}
+      {statusMessage && <p role="status" className="text-sm text-emerald-700">{statusMessage}</p>}
 
       {isLoading ? (
         <Card>
@@ -137,6 +164,7 @@ export function ClientDetailPage() {
             titleSuffix={<InfoTooltip label="About QuickBooks connection" text="QuickBooks connection status and authorization options for this entity." />}
             actions={client.source !== 'demo' ? <button type="button" onClick={handleRefresh} disabled={isRefreshing} className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-hq-teal hover:bg-hq-teal/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:cursor-wait disabled:opacity-60"><RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />{isRefreshing ? 'Reloading…' : 'Reload saved status'}</button> : undefined}
           >
+            {recordStatus === 'inactive' && <p className="mb-3 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-700">This entity is inactive. Connection details below are the last saved values; QuickBooks access, checks, and notifications are paused until it is activated.</p>}
             {refreshMessage && <p className="mb-3 text-xs text-slate-600" role="status">{refreshMessage}</p>}
             <div className="space-y-3">
               {connectionRows.length === 0 ? (
@@ -172,7 +200,7 @@ export function ClientDetailPage() {
                 </div>
               ))}
             </div>
-            {client.source !== 'demo' && environmentOptions.length > 0 && (
+            {client.source !== 'demo' && recordStatus === 'active' && environmentOptions.length > 0 && (
               <details className="mt-5 rounded-xl border border-slate-200 bg-white">
                 <summary className="cursor-pointer rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-hq-teal/5 hover:text-hq-teal focus-visible:bg-hq-teal/5 focus-visible:text-hq-teal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal">{isInitialConnection ? 'Connect QuickBooks' : 'Reconnect QuickBooks'}</summary>
                 <div className="border-t border-slate-200 px-4 py-4">
@@ -216,7 +244,8 @@ export function ClientDetailPage() {
             </div>
           </details>
 
-          {client.source !== 'demo' && <div className="flex justify-end border-t border-slate-200 pt-3">
+          {client.source !== 'demo' && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3">
+            {recordStatus === 'active' ? <button ref={statusActionRef} type="button" onClick={() => setShowDeactivateModal(true)} disabled={isChangingStatus || isDeleting} className="rounded-lg px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 disabled:opacity-50">Deactivate entity</button> : recordStatus === 'inactive' ? <button ref={statusActionRef} type="button" onClick={() => void handleStatusChange('active')} disabled={isChangingStatus || isDeleting} className="rounded-lg px-3 py-2 text-sm font-medium text-hq-teal hover:bg-hq-teal/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50">{isChangingStatus ? 'Activating...' : 'Activate entity'}</button> : <span />}
             <button
               type="button"
               onClick={() => setShowDeleteModal(true)}
@@ -234,6 +263,16 @@ export function ClientDetailPage() {
         </Card>
       ) : null}
 
+      <ConfirmDangerModal
+        open={showDeactivateModal}
+        title="Deactivate entity?"
+        description="The entity and its credentials will be kept, but QuickBooks access, scheduled checks, and notifications will stop for both prod and sandbox until you activate it again."
+        confirmLabel="Deactivate entity"
+        confirmingLabel="Deactivating..."
+        onCancel={() => setShowDeactivateModal(false)}
+        onConfirm={() => void handleStatusChange('inactive')}
+        isConfirming={isChangingStatus}
+      />
       <ConfirmDangerModal
         open={showDeleteModal}
         title="Delete entity?"

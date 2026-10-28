@@ -27,11 +27,11 @@ describe('stored connection status', () => {
       connections: [],
     })).toEqual(['sandbox'])
   })
-  it('keeps client-record status separate from credential status', () => {
+  it('uses the canonical client status instead of stale metadata', () => {
     expect(getClientRecordStatus({
       id: '00000000-0000-4000-8000-000000000005', name: 'Sample client F',
       client_group: null,
       status: 'active', metadata: { status: 'inactive' }, environments: [],
-    })).toBe('inactive')
+    })).toBe('active')
   })
 })
