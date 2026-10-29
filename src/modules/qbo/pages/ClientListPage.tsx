@@ -208,7 +208,7 @@ export function ClientListPage() {
   const now = new Date()
   const visibleEntities = clients.filter((entity) => {
     const connection = entity.connection_state ?? 'unavailable'
-    const matchesConnection = connectionFilter === 'all' || (getClientRecordStatus(entity) === 'active' && connection === connectionFilter)
+    const matchesConnection = connectionFilter === 'all' || connection === connectionFilter
     const matchesSearch = !searchTerm || getClientName(entity).toLocaleLowerCase().includes(searchTerm)
       || formatClientGroup(entity.client_group).toLocaleLowerCase().includes(searchTerm)
       || (entity.client_group || '').includes(searchTerm)
@@ -434,8 +434,7 @@ function EntityRow({ entity }: { entity: QboClient }) {
   const entityId = getClientId(entity)
   const recordStatus = getClientRecordStatus(entity)
   const kind: QboConnectionState = entity.connection_state ?? 'unavailable'
-  const status = recordStatus === 'inactive' ? { label: 'Unavailable', tone: 'neutral' }
-    : kind === 'connected' ? { label: 'Connected', tone: 'success' }
+  const status = kind === 'connected' ? { label: 'Connected', tone: 'success' }
     : kind === 'reconnect-needed' ? { label: 'Reconnect needed', tone: 'warning' }
       : { label: 'Unavailable', tone: 'neutral' }
 
