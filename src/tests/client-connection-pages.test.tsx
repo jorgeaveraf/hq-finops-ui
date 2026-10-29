@@ -306,18 +306,23 @@ describe('FinOps client connection display', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 
-  it('shows an inactive client as unavailable while preserving its record status', async () => {
+  it('shows Reconnect needed for an inactive client while preserving its record status', async () => {
     const inactive = { ...summary, id: '00000000-0000-4000-8000-000000000005', name: 'Sample client F', status: 'inactive' }
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => new Response(JSON.stringify(
-      String(input).includes('/clients?connection_status=1') ? [summary, inactive].map((entity) => ({ ...entity, connection_state: 'connected' })) : { ...detail, id: inactive.id, connections: detail.connections },
+      String(input).includes('/clients?connection_status=1')
+        ? [{ ...summary, connection_state: 'connected' }, { ...inactive, connection_state: 'reconnect-needed' }]
+        : { ...detail, id: inactive.id, connections: detail.connections },
     ), { status: 200 }))
     render(<MemoryRouter><ClientListPage /></MemoryRouter>)
     expect(await screen.findByText('Inactive entity')).toBeInTheDocument()
     expect(screen.queryByText('Status: Active')).not.toBeInTheDocument()
-    await waitFor(() => expect(screen.getAllByText('Connected')).toHaveLength(1))
-    expect(screen.getByText('Unavailable')).toBeInTheDocument()
-    chooseFilter('QuickBooks connection', 'Connected')
-    expect(screen.queryByText('Inactive entity')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Reconnect needed')).toBeInTheDocument())
+    expect(screen.getByText('Connected')).toBeInTheDocument()
+    expect(screen.queryByText('Unavailable')).not.toBeInTheDocument()
+    chooseFilter('QuickBooks connection', 'Reconnect needed')
+    expect(screen.getByText('Inactive entity')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Sample client F' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Sample client A' })).not.toBeInTheDocument()
   })
 
   it('places the saved review in client detail and keeps reconnect secondary', async () => {
