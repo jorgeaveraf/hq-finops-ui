@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { NavLink, Outlet } from 'react-router-dom'
-import { Home, LogOut, PlugZap } from 'lucide-react'
+import { Activity, Home, KeyRound, LogOut, PlugZap, ShieldCheck, Users } from 'lucide-react'
 import { useAuth } from '../modules/auth/useAuth'
 import hqLogo from '../assets/hq-logo.png'
 
@@ -9,6 +9,10 @@ const navItems = [
   { to: '/', label: 'Overview', icon: Home },
   { to: '/qbo/clients', label: 'Clients & Integrations', icon: PlugZap },
 ]
+const accessNavItem = { to: '/access', label: 'My access', icon: ShieldCheck }
+const keysNavItem = { to: '/access/keys', label: 'My API keys', icon: KeyRound }
+const activityNavItem = { to: '/access/activity', label: 'Activity', icon: Activity }
+const usersNavItem = { to: '/access/users', label: 'People and access', icon: Users }
 
 function AccountMenu({ compact = false, mobile = false }: { compact?: boolean; mobile?: boolean }) {
   const { user, logout } = useAuth()
@@ -127,13 +131,22 @@ function AccountMenu({ compact = false, mobile = false }: { compact?: boolean; m
 }
 
 export function AppLayout() {
-  const { role } = useAuth()
+  const { role, kind, access } = useAuth()
   const [pinned, setPinned] = useState(false)
   const [temporaryOpen, setTemporaryOpen] = useState(false)
   const sidebarRef = useRef<HTMLElement>(null)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const expanded = pinned || temporaryOpen
-  const items = role === 'admin' ? navItems : navItems.filter((item) => item.to !== '/qbo/clients')
+  const canReadClients = kind === 'google'
+    ? access?.effective_grants.some((grant) => grant.operation === 'client.read')
+    : role === 'admin'
+  const items = [
+    ...(canReadClients ? navItems : navItems.filter((item) => item.to !== '/qbo/clients')),
+    ...(kind === 'google' ? [accessNavItem] : []),
+    ...(kind === 'google' ? [keysNavItem] : []),
+    ...(kind === 'google' && access?.user.role === 'Admin' && access.effective_grants.some((grant) => grant.operation === 'users.admin' && !grant.client_id && !grant.environment) ? [usersNavItem] : []),
+    ...(kind === 'google' && access?.user.role === 'Admin' && access.effective_grants.some((grant) => grant.operation === 'activity.read' && !grant.client_id && !grant.environment) ? [activityNavItem] : []),
+  ]
 
   const cancelHover = () => {
     if (hoverTimer.current !== null) clearTimeout(hoverTimer.current)

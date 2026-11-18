@@ -6,12 +6,15 @@ import { Button } from '../../../components/Button'
 import { Card } from '../../../components/Card'
 import { ConfirmDangerModal } from '../../../components/ConfirmDangerModal'
 import { InfoTooltip } from '../../../components/InfoTooltip'
-import { deleteClient, describeGatewayError, getClient, updateClientStatus } from '../api/qboGatewayClient'
+import { deleteClient, describeGatewayError, getClient, updateClientDetails, updateClientStatus } from '../api/qboGatewayClient'
 import type { QboClient } from '../api/qboGatewayClient'
 import { formatCheckedAt, formatClientGroup, getClientEnvironments, getClientId, getClientName, getClientRecordStatus, getConnectionStatus } from '../utils'
 import { ReconnectButton } from '../components/ReconnectButton'
 
-export function ClientDetailPage() {
+export function ClientDetailPage({ readOnly = false, canUpdate = true, canDelete = true, canEditDetails = false, canManageConnection = true }: { readOnly?: boolean; canUpdate?: boolean; canDelete?: boolean; canEditDetails?: boolean; canManageConnection?: boolean }) {
+  canUpdate = canUpdate && !readOnly
+  canDelete = canDelete && !readOnly
+  canManageConnection = canManageConnection && !readOnly
   const { clientId } = useParams<{ clientId: string }>()
   const navigate = useNavigate()
   const [client, setClient] = useState<QboClient | null>(null)
@@ -27,6 +30,11 @@ export function ClientDetailPage() {
   const [isChangingStatus, setIsChangingStatus] = useState(false)
   const [statusError, setStatusError] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [editingDetails, setEditingDetails] = useState(false)
+  const [draftName, setDraftName] = useState('')
+  const [draftGroup, setDraftGroup] = useState('')
+  const [detailsError, setDetailsError] = useState<string | null>(null)
+  const [savingDetails, setSavingDetails] = useState(false)
   const statusActionRef = useRef<HTMLButtonElement>(null)
   const authorizationStartedAt = useRef<number | null>(null)
 
@@ -130,6 +138,17 @@ export function ClientDetailPage() {
     }
   }
 
+  const handleDetailsSave = async () => {
+    if (!clientId || !draftName.trim() || !/^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(draftGroup)) return
+    setSavingDetails(true); setDetailsError(null)
+    try {
+      const updated = await updateClientDetails(clientId, draftName.trim(), draftGroup)
+      setClient((current) => current ? { ...current, name: updated.name, client_group: updated.client_group } : current)
+      setEditingDetails(false)
+    } catch (err) { setDetailsError(describeGatewayError(err, 'Unable to edit entity.')) }
+    finally { setSavingDetails(false) }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -145,6 +164,7 @@ export function ClientDetailPage() {
       {error && <Alert title="Error" description={error} variant="error" />}
       {deleteError && <Alert title="Delete failed" description={deleteError} variant="error" />}
       {statusError && <Alert title="Status change failed" description={statusError} variant="error" />}
+      {detailsError && <Alert title="Edit failed" description={detailsError} variant="error" />}
       {statusMessage && <p role="status" className="text-sm text-emerald-700">{statusMessage}</p>}
 
       {isLoading ? (
@@ -158,6 +178,10 @@ export function ClientDetailPage() {
             description={<span className="-ml-0.5 inline-flex w-max whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{client.client_group ? formatClientGroup(client.client_group) : 'No client assigned'}</span>}
             actions={<div className="flex items-center gap-2">{client.source === 'demo' && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">Demo data</span>}<span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${recordStatus === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>{recordStatusLabel}</span></div>}
           />
+          {canEditDetails && !readOnly && client.source !== 'demo' && <div className="rounded-2xl bg-white px-6 py-4 shadow-soft">
+            {!editingDetails ? <button type="button" onClick={() => { setDraftName(client.name); setDraftGroup(client.client_group || ''); setEditingDetails(true) }} className="text-sm font-semibold text-hq-teal hover:underline">Edit entity name and group</button>
+              : <div className="flex flex-wrap items-end gap-3"><label className="text-sm text-slate-700">Entity name<input value={draftName} onChange={(event) => setDraftName(event.target.value)} className="mt-1 block rounded-lg border border-slate-300 px-3 py-2" /></label><label className="text-sm text-slate-700">Group<input value={draftGroup} onChange={(event) => setDraftGroup(event.target.value)} className="mt-1 block rounded-lg border border-slate-300 px-3 py-2" /></label><button type="button" disabled={savingDetails || !draftName.trim() || !/^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(draftGroup)} onClick={() => void handleDetailsSave()} className="rounded-lg bg-hq-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Save</button><button type="button" disabled={savingDetails} onClick={() => setEditingDetails(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm">Cancel</button></div>}
+          </div>}
 
           <Card
             title="QuickBooks connection"
@@ -200,7 +224,7 @@ export function ClientDetailPage() {
                 </div>
               ))}
             </div>
-            {client.source !== 'demo' && recordStatus === 'active' && environmentOptions.length > 0 && (
+            {canManageConnection && client.source !== 'demo' && recordStatus === 'active' && environmentOptions.length > 0 && (
               <details className="mt-5 rounded-xl border border-slate-200 bg-white">
                 <summary className="cursor-pointer rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-hq-teal/5 hover:text-hq-teal focus-visible:bg-hq-teal/5 focus-visible:text-hq-teal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal">{isInitialConnection ? 'Connect QuickBooks' : 'Reconnect QuickBooks'}</summary>
                 <div className="border-t border-slate-200 px-4 py-4">
@@ -244,9 +268,9 @@ export function ClientDetailPage() {
             </div>
           </details>
 
-          {client.source !== 'demo' && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3">
-            {recordStatus === 'active' ? <button ref={statusActionRef} type="button" onClick={() => setShowDeactivateModal(true)} disabled={isChangingStatus || isDeleting} className="rounded-lg px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 disabled:opacity-50">Deactivate entity</button> : recordStatus === 'inactive' ? <button ref={statusActionRef} type="button" onClick={() => void handleStatusChange('active')} disabled={isChangingStatus || isDeleting} className="rounded-lg px-3 py-2 text-sm font-medium text-hq-teal hover:bg-hq-teal/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50">{isChangingStatus ? 'Activating...' : 'Activate entity'}</button> : <span />}
-            <button
+          {(canUpdate || canDelete) && client.source !== 'demo' && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3">
+            {canUpdate && (recordStatus === 'active' ? <button ref={statusActionRef} type="button" onClick={() => setShowDeactivateModal(true)} disabled={isChangingStatus || isDeleting} className="rounded-lg px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 disabled:opacity-50">Deactivate entity</button> : recordStatus === 'inactive' ? <button ref={statusActionRef} type="button" onClick={() => void handleStatusChange('active')} disabled={isChangingStatus || isDeleting} className="rounded-lg px-3 py-2 text-sm font-medium text-hq-teal hover:bg-hq-teal/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50">{isChangingStatus ? 'Activating...' : 'Activate entity'}</button> : <span />)}
+            {canDelete && <button
               type="button"
               onClick={() => setShowDeleteModal(true)}
               disabled={isDeleting}
@@ -254,7 +278,7 @@ export function ClientDetailPage() {
             >
               <Trash2 className="h-4 w-4" aria-hidden="true" />
               Delete entity
-            </button>
+            </button>}
           </div>}
         </>
       ) : !error ? (

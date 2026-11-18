@@ -90,7 +90,7 @@ function compareEntities(left: QboClient, right: QboClient, sort: SortOrder) {
   return primary || nameCollator.compare(getClientName(left), getClientName(right)) || left.id.localeCompare(right.id)
 }
 
-export function ClientListPage() {
+export function ClientListPage({ readOnly = false }: { readOnly?: boolean }) {
   const [clients, setClients] = useState<QboClient[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
@@ -249,9 +249,9 @@ export function ClientListPage() {
           <p className="text-xs font-semibold uppercase text-hq-teal">Clients & Integrations</p>
           <h1 className="text-2xl font-bold text-slate-900">QuickBooks Online entities</h1>
         </div>
-        <Button asChild icon={<Plus className="h-4 w-4" />}>
+        {!readOnly && <Button asChild icon={<Plus className="h-4 w-4" />}>
           <Link ref={createLinkRef} to="/qbo/clients/new">Create entity</Link>
-        </Button>
+        </Button>}
       </div>
 
       <Card
@@ -271,11 +271,11 @@ export function ClientListPage() {
           <div className="flex flex-col items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-600 md:flex-row">
             <div>
               <p className="font-semibold text-slate-900">No entities found</p>
-              <p>Create an entity under a client to start the QuickBooks connection flow.</p>
+              <p>{readOnly ? 'No permitted entities are available.' : 'Create an entity under a client to start the QuickBooks connection flow.'}</p>
             </div>
-            <Button asChild size="sm" icon={<Plus className="h-4 w-4" />}>
+            {!readOnly && <Button asChild size="sm" icon={<Plus className="h-4 w-4" />}>
               <Link to="/qbo/clients/new">Create entity</Link>
-            </Button>
+            </Button>}
           </div>
         ) : (
           <div className="space-y-4">

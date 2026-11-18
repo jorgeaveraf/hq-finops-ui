@@ -21,18 +21,21 @@ type Overview = {
 }
 
 export function DashboardPage() {
-  const { role } = useAuth()
+  const { role, kind, access } = useAuth()
+  const canReadClients = kind === 'google'
+    ? Boolean(access?.effective_grants.some((grant) => grant.operation === 'client.read'))
+    : role === 'admin'
   const [overview, setOverview] = useState<Overview | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (role !== 'admin') return
+    if (!canReadClients) return
     let mounted = true
     apiRequest<Overview>('/overview')
       .then((data) => { if (mounted) setOverview(data) })
       .catch(() => { if (mounted) setError('Saved connection status could not be loaded.') })
     return () => { mounted = false }
-  }, [role])
+  }, [canReadClients])
 
   const needsVerification = overview
     ? overview.notChecked + overview.unavailable + overview.noCredential
@@ -50,7 +53,7 @@ export function DashboardPage() {
         />
       </header>
 
-      {role !== 'admin' ? (
+      {!canReadClients ? (
         <Card title="Connection overview" description="Administrator access is required to view client connection information.">
           <p className="text-sm text-slate-600">Contact an administrator if you need access.</p>
         </Card>

@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ShieldCheck, Eye, EyeOff } from 'lucide-react'
 import { Button } from '../../components/Button'
 import { TextField } from '../../components/TextField'
@@ -13,10 +13,17 @@ type LocationState = {
 }
 
 export function LoginPage() {
-  const { login, isAuthenticated } = useAuth()
+  const { login, startGoogleLogin, authError, isAuthenticated } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const from = (location.state as LocationState | undefined)?.from || '/'
+  const googleError = ({
+    not_authorized: 'This Google account does not have access to FinOps. Ask an administrator to authorize it.',
+    invalid_state: 'The sign-in attempt expired. Please try again.',
+    google_failed: 'Google sign-in could not be completed. Please try again.',
+    unavailable: 'FinOps sign-in is temporarily unavailable. Please try again later.',
+  } as Record<string, string>)[searchParams.get('auth_error') || '']
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -69,7 +76,13 @@ export function LoginPage() {
           </div>
         </div>
 
-        {error && <Alert title="Authentication failed" description={error} variant="error" />}
+        {(error || googleError || authError) && <Alert title="Sign-in unsuccessful" description={error || googleError || authError || ''} variant="error" />}
+
+        <Button type="button" className="w-full" onClick={startGoogleLogin}>
+          Continue with Google
+        </Button>
+
+        <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">Local access</p>
 
         <form className="space-y-4 mt-4" onSubmit={handleSubmit}>
           <TextField

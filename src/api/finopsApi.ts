@@ -20,7 +20,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   })
   const body = await response.json().catch(() => null)
   if (!response.ok) {
-    const error = new Error(body?.message || `Request failed (${response.status})`) as Error & { status: number }
+    const error = new Error(body?.message || body?.detail || `Request failed (${response.status})`) as Error & { status: number }
     error.status = response.status
     throw error
   }

@@ -6,13 +6,29 @@ export type Session = {
   csrf: string
 }
 
+export type AccessGrant = {
+  id: string
+  operation: string
+  client_id: string | null
+  environment: string | null
+}
+
+export type MyAccess = {
+  user: { id: string; role: 'Admin' | 'Operator' | 'Viewer'; status: string }
+  effective_grants: AccessGrant[]
+}
+
 export type AuthContextValue = {
   user: Session['user'] | null
   role: Session['role'] | null
+  kind: 'google' | 'local' | null
+  access: MyAccess | null
+  authError: string | null
   isAuthenticated: boolean
   isLoading: boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  startGoogleLogin: () => void
 }
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined)
