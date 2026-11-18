@@ -12,6 +12,7 @@ import { LoginPage } from '../modules/auth/LoginPage'
 import { ActivityPage } from '../modules/activity/ActivityPage'
 import { RequireActivityRead } from '../modules/auth/RequireActivityRead'
 import { AccessAdministrationPage } from '../modules/auth/AccessAdministrationPage'
+import { AccessUserDetailPage } from '../modules/auth/AccessUserDetailPage'
 import { RequireUsersAdmin } from '../modules/auth/RequireUsersAdmin'
 
 afterEach(() => vi.restoreAllMocks())
@@ -121,7 +122,7 @@ describe('Google governed access', () => {
     expect(globalThis.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/clients'), expect.anything())
   })
 
-  it('lets an Admin preauthorize a Google email and assign a scoped grant', async () => {
+  it('lets an Admin approve a person, preview a staged policy, and confirm its application', async () => {
     mockGoogleSession([
       { id: 'users-grant', operation: 'users.admin', client_id: null, environment: null },
       { id: 'grants-grant', operation: 'grants.admin', client_id: null, environment: null },
@@ -138,28 +139,40 @@ describe('Google governed access', () => {
       if (path.endsWith('/access/users')) return new Response(JSON.stringify(approved ? [
         { id: 'new-user', email: 'ana@example.test', display_name: null, role: 'Operator', status: 'active', issuer: null, sub: null },
       ] : []), { status: 200 })
-      if (path.includes('/access/grants')) return new Response(JSON.stringify(init?.method === 'POST' ? { id: 'new-grant' } : []), { status: init?.method === 'POST' ? 201 : 200 })
+      if (path.endsWith('/access/grants?user_id=new-user')) return new Response(JSON.stringify([]), { status: 200 })
+      if (path.endsWith('/access/users/new-user/policy/preview')) return new Response(JSON.stringify({ fingerprint: 'fingerprint-1', affected_keys: ['Worker'], suspended_keys: [], changes: ['Added client.update for Allowed entity'] }), { status: 200 })
+      if (path.endsWith('/access/users/new-user/policy')) return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      if (path.endsWith('/clients')) return new Response(JSON.stringify([{ id: 'client-1', name: 'Allowed entity' }]), { status: 200 })
       return baseFetch(input, init)
     })
     await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes>
       <Route element={<AppLayout />}><Route element={<RequireUsersAdmin />}>
         <Route path="/access/users" element={<AccessAdministrationPage />} />
+        <Route path="/access/users/:userId" element={<AccessUserDetailPage />} />
       </Route></Route>
     </Routes></AuthProvider></MemoryRouter>))
     expect(await screen.findByRole('heading', { name: 'People and access' })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Google email'), { target: { value: 'ana@example.test' } })
-    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'Operator' } })
+    fireEvent.change(screen.getByLabelText('Initial role'), { target: { value: 'Operator' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
-    expect(await screen.findByText(/Awaiting first sign-in/)).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /Awaiting first sign-in/ })).toBeInTheDocument()
     expect(globalThis.fetch).toHaveBeenCalledWith('/automations/api/access/users', expect.objectContaining({
       method: 'POST', body: JSON.stringify({ email: 'ana@example.test', role: 'Operator' }),
     }))
+    fireEvent.click(screen.getByRole('link', { name: /ana@example.test/ }))
+    expect(await screen.findByRole('heading', { name: 'ana@example.test' })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Operation'), { target: { value: 'client.update' } })
     fireEvent.change(screen.getByLabelText('Entity'), { target: { value: 'client-1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Add grant' }))
-    await screen.findByText('Permission granted.')
-    expect(globalThis.fetch).toHaveBeenCalledWith('/automations/api/access/grants', expect.objectContaining({
-      method: 'POST', body: JSON.stringify({ user_id: 'new-user', operation: 'client.update', client_id: 'client-1', environment: null }),
+    fireEvent.click(screen.getByRole('button', { name: 'Stage grant' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Preview policy changes' }))
+    expect(await screen.findByRole('region', { name: 'Policy impact preview' })).toHaveTextContent('Worker')
+    expect(globalThis.fetch).toHaveBeenCalledWith('/automations/api/access/users/new-user/policy/preview', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ role: 'Operator', status: 'active', grants: [{ operation: 'client.update', client_id: 'client-1', environment: null }] }),
+    }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and apply changes' }))
+    await screen.findByText('Access policy updated.')
+    expect(globalThis.fetch).toHaveBeenCalledWith('/automations/api/access/users/new-user/policy', expect.objectContaining({
+      method: 'PUT', body: JSON.stringify({ role: 'Operator', status: 'active', grants: [{ operation: 'client.update', client_id: 'client-1', environment: null }], expected_fingerprint: 'fingerprint-1', acknowledge_key_suspension: false }),
     }))
   })
 
@@ -179,11 +192,15 @@ describe('Google governed access', () => {
     await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes>
       <Route element={<AppLayout />}><Route element={<RequireUsersAdmin />}>
         <Route path="/access/users" element={<AccessAdministrationPage />} />
+        <Route path="/access/users/:userId" element={<AccessUserDetailPage />} />
       </Route></Route>
     </Routes></AuthProvider></MemoryRouter>))
     expect(await screen.findByRole('heading', { name: 'People and access' })).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Role for jorge@example.test' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Disable' })).toBeDisabled()
+    expect(screen.queryByRole('combobox', { name: 'Role for jorge@example.test' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Disable' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: /jorge@example.test/ }))
+    expect(await screen.findByLabelText('Role')).toBeDisabled()
+    expect(screen.getByLabelText('Sign-in status')).toBeDisabled()
   })
 
   it('retains the local login when no Google session exists', async () => {

@@ -9,6 +9,7 @@ import { MyApiKeysPage } from './modules/auth/MyApiKeysPage'
 import { RequireActivityRead } from './modules/auth/RequireActivityRead'
 import { ActivityPage } from './modules/activity/ActivityPage'
 import { AccessAdministrationPage } from './modules/auth/AccessAdministrationPage'
+import { AccessUserDetailPage } from './modules/auth/AccessUserDetailPage'
 import { RequireUsersAdmin } from './modules/auth/RequireUsersAdmin'
 import { useAuth } from './modules/auth/useAuth'
 import { LoginPage } from './modules/auth/LoginPage'
@@ -60,7 +61,10 @@ function App() {
             <Route index element={<DashboardPage />} />
             <Route path="/access" element={<AccessHomePage />} />
             <Route path="/access/keys" element={<MyApiKeysPage />} />
-            <Route element={<RequireUsersAdmin />}><Route path="/access/users" element={<AccessAdministrationPage />} /></Route>
+            <Route element={<RequireUsersAdmin />}>
+              <Route path="/access/users" element={<AccessAdministrationPage />} />
+              <Route path="/access/users/:userId" element={<AccessUserDetailPage />} />
+            </Route>
             <Route element={<RequireActivityRead />}><Route path="/access/activity" element={<ActivityPage />} /></Route>
             <Route element={<RequireClientRead />}>
               <Route path="/qbo/clients" element={<ClientsRoute />}>
