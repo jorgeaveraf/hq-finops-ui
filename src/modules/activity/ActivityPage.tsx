@@ -16,8 +16,8 @@ type ActivityItem = {
   status: 'completed' | 'denied' | 'failed' | 'unknown'
 }
 type ActivityPageResponse = { items: ActivityItem[]; next_cursor: string | null }
-type Filters = { from: string; to: string; status: string; category: string; actorEmail: string }
-const emptyFilters: Filters = { from: '', to: '', status: '', category: '', actorEmail: '' }
+type Filters = { from: string; to: string; category: string; actorEmail: string }
+const emptyFilters: Filters = { from: '', to: '', category: '', actorEmail: '' }
 const statusLabels: Record<ActivityItem['status'], string> = {
   completed: 'Completed', denied: 'Not permitted', failed: 'Could not complete', unknown: 'Outcome unconfirmed',
 }
@@ -30,7 +30,6 @@ function queryFor(filters: Filters, cursor: string | null) {
   const query = new URLSearchParams({ limit: '25', scope: 'all' })
   if (filters.from) query.set('from_at', new Date(`${filters.from}T00:00:00`).toISOString())
   if (filters.to) query.set('to_at', new Date(`${filters.to}T23:59:59`).toISOString())
-  if (filters.status) query.set('status', filters.status)
   if (filters.category) query.set('category', filters.category)
   if (filters.actorEmail) query.set('actor_email', filters.actorEmail)
   if (cursor) query.set('cursor', cursor)
@@ -90,7 +89,6 @@ export function ActivityPage() {
       <details className="mt-2 text-sm text-slate-600"><summary className="cursor-pointer">More filters</summary><div className="mt-2 flex flex-wrap items-end gap-3">
         <label>From<input aria-label="From" type="date" value={draft.from} onChange={(event) => setDraft({ ...draft, from: event.target.value })} className="mt-1 block rounded-lg border border-slate-300 px-3 py-2" /></label>
         <label>To<input aria-label="To" type="date" value={draft.to} onChange={(event) => setDraft({ ...draft, to: event.target.value })} className="mt-1 block rounded-lg border border-slate-300 px-3 py-2" /></label>
-        <label>Result<select aria-label="Result" value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value })} className="mt-1 block rounded-lg border border-slate-300 px-3 py-2"><option value="">All results</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       </div></details>
     </form>
     {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}

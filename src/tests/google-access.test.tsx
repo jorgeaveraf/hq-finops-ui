@@ -53,7 +53,8 @@ describe('Google governed access', () => {
       </Route>
     </Routes></AuthProvider></MemoryRouter>))
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeInTheDocument()
-    expect(screen.getAllByText('Outcome unconfirmed')).toHaveLength(2)
+    expect(screen.getAllByText('Outcome unconfirmed')).toHaveLength(1)
+    expect(screen.queryByLabelText('Result')).not.toBeInTheDocument()
     expect(screen.getByText('via Reporting · Production')).toBeInTheDocument()
     expect(screen.getByText('tried to view QuickBooks data for Allowed entity')).toBeInTheDocument()
     expect(screen.queryByText('api_key_id')).not.toBeInTheDocument()
