@@ -3,7 +3,7 @@ import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { FilterDropdown } from '../../components/FilterDropdown'
 
 const dateValue = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-const displayDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+const displayDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
 export function ActivityDateFilter({ from, to, onChange }: { from: string; to: string; onChange: (from: string, to: string) => void }) {
   const [open, setOpen] = useState(false)
@@ -45,7 +45,7 @@ export function ActivityDateFilter({ from, to, onChange }: { from: string; to: s
       <p aria-live="polite" className="my-4 rounded-lg bg-slate-50 p-3 text-sm">{start ? displayDate(start) : 'Start date'} → {end ? displayDate(end) : 'End date'}</p>
       <div className="mb-3 flex items-center justify-between">
         <button type="button" aria-label="Previous month" className="rounded-lg p-2 hover:bg-slate-100" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={20} /></button>
-        <span aria-live="polite" className="text-sm font-semibold">{month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+        <span aria-live="polite" className="text-sm font-semibold">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
         <button type="button" aria-label="Next month" disabled={month.getFullYear() === new Date().getFullYear() && month.getMonth() === new Date().getMonth()} className="rounded-lg p-2 hover:bg-slate-100 disabled:opacity-30" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={20} /></button>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-sm">

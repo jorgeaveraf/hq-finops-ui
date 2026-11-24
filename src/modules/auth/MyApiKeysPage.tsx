@@ -129,6 +129,7 @@ export function MyApiKeysPage() {
   const nameRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
   const [purpose, setPurpose] = useState<'qbo' | 'entities' | null>(null)
+  const [keyStep, setKeyStep] = useState<'purpose' | 'setup'>('purpose')
   const [serverNameConflict, setServerNameConflict] = useState(false)
   const [expiresOn, setExpiresOn] = useState('')
   const [expiryChoice, setExpiryChoice] = useState<ExpiryChoice>('never')
@@ -150,7 +151,7 @@ export function MyApiKeysPage() {
         if (typeof dialog.showModal === 'function') dialog.showModal()
         else dialog.setAttribute('open', '')
       }
-      if (createOpen && !issued) nameRef.current?.focus()
+      if (createOpen && !issued && keyStep === 'setup') nameRef.current?.focus()
     } else if (dialog.open) {
       if (typeof dialog.close === 'function') dialog.close()
       else dialog.removeAttribute('open')
@@ -166,7 +167,7 @@ export function MyApiKeysPage() {
       setError(null)
       if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus()
     }
-  }, [createOpen, issued])
+  }, [createOpen, issued, keyStep])
 
   useEffect(() => {
     const dialog = infoDialogRef.current
@@ -391,6 +392,7 @@ export function MyApiKeysPage() {
   const resetCreate = () => {
     setName('')
     setPurpose(null)
+    setKeyStep('purpose')
     setServerNameConflict(false)
     setExpiresOn('')
     setExpiryChoice('never')
@@ -534,7 +536,7 @@ export function MyApiKeysPage() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 className="sr-only">Your API keys</h1>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">{policy && <span className="text-sm font-medium text-slate-700">{policy.active_count} of {policy.active_limit} active</span>}{expiringKeys.length > 0 && <button type="button" onClick={() => setInfoOpen('expiring')} className="inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-sm font-medium text-amber-800 underline decoration-amber-400 underline-offset-4 hover:text-amber-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700"><Clock3 aria-hidden="true" size={16} />{expiringKeys.length} {expiringKeys.length === 1 ? 'key expires' : 'keys expire'} within 30 days</button>}</div>
-        <button type="button" aria-label="Create API key" disabled={loading || busy || !sourceGrants.length || !!policy && policy.active_count >= policy.active_limit} onClick={() => { setError(null); setSelected([]); setPurpose(null); setScopeMode('selected'); setFocusedEntityId(null); setEntitySearch(''); setCreateOpen(true) }} className="icon-first-action ml-auto rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Plus aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Create API key</span></button>
+        <button type="button" aria-label="Create API key" disabled={loading || busy || !sourceGrants.length || !!policy && policy.active_count >= policy.active_limit} onClick={() => { setError(null); setSelected([]); setPurpose(null); setKeyStep('purpose'); setScopeMode('selected'); setFocusedEntityId(null); setEntitySearch(''); setCreateOpen(true) }} className="icon-first-action ml-auto rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Plus aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Create API key</span></button>
       </div>
       {!loading && activeKeys.length > 1 && <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm" aria-label="Filter API keys">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -619,15 +621,19 @@ export function MyApiKeysPage() {
         <div className="mt-6 flex justify-end border-t border-slate-200 pt-4"><button type="button" disabled={busy} onClick={() => setIssued(null)} className="rounded-lg bg-hq-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Done</button></div>
       </div> : <form onSubmit={create} className="flex max-h-[90dvh] min-w-0 flex-col">
         <div data-dialog-header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
-          <div><h2 className="text-xl font-semibold text-slate-950">Create an API key</h2><p className="mt-1 text-sm text-slate-600">Name the integration and choose exactly what this key can access.</p></div>
+          <div><h2 className="text-xl font-semibold text-slate-950">Create an API key</h2><p className="mt-1 text-sm text-slate-600">{keyStep === 'purpose' ? 'Choose one dedicated purpose for this key.' : 'Name the integration and define its access.'}</p></div>
           <button type="button" aria-label="Close API key setup" disabled={busy} onClick={closeCreate} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-hq-teal disabled:opacity-50"><X aria-hidden="true" className="h-4 w-4" /></button>
         </div>
+        <div role="group" aria-label="API key setup steps" className="grid grid-cols-2 border-b border-slate-200 px-6"><button type="button" aria-current={keyStep === 'purpose' ? 'step' : undefined} onClick={() => setKeyStep('purpose')} className={`border-b-2 py-3 text-sm font-semibold ${keyStep === 'purpose' ? 'border-hq-teal text-hq-teal' : 'border-transparent text-slate-600'}`}>1 · Key type</button><button type="button" aria-current={keyStep === 'setup' ? 'step' : undefined} disabled={!purpose} onClick={() => setKeyStep('setup')} className={`border-b-2 py-3 text-sm font-semibold disabled:opacity-50 ${keyStep === 'setup' ? 'border-hq-teal text-hq-teal' : 'border-transparent text-slate-600'}`}>2 · Details & access</button></div>
         <div data-dialog-body className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-6 py-5">
           {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
-          <label className="block text-sm font-medium text-slate-800">Tool or purpose
+          {keyStep === 'setup' && <>
+          <label className="block text-sm font-medium text-slate-800">Key name
             <input ref={nameRef} aria-label="Key name" aria-invalid={nameConflict || undefined} aria-describedby={nameConflict ? 'key-name-error' : undefined} required maxLength={100} value={name} onChange={(event) => { setName(event.target.value); setServerNameConflict(false) }} placeholder="Name of the tool or integration" className={`mt-2 block w-full rounded-lg border px-3 py-2 font-normal ${nameConflict ? 'border-rose-500' : 'border-slate-300'}`} />
             {nameConflict && <span id="key-name-error" role="alert" className="mt-1.5 block text-xs font-normal text-rose-700">An active key already uses this name. Choose a distinct name or replace the existing key.</span>}
           </label>
+          </>}
+          {keyStep === 'purpose' &&
           <fieldset>
             <legend className="text-sm font-semibold text-slate-900">What will this key do?</legend>
             <p className="mt-1 text-sm text-slate-600">Choose one purpose. Permissions for the other purpose cannot be added to this key.</p>
@@ -639,9 +645,9 @@ export function MyApiKeysPage() {
                 <span className="block text-sm font-semibold">Direct entity operations</span><span className="mt-1 block text-xs text-slate-600">Create entities anywhere; update or delete entities within this key’s entity access.</span>
               </button>
             </div>
-          </fieldset>
-          <KeyExpiryPicker choice={expiryChoice} date={expiresOn} maximumDays={policy?.maximum_expiration_days ?? 120} onChange={(nextChoice, nextDate) => { setExpiryChoice(nextChoice); setExpiresOn(nextDate) }} />
-          {purpose && <>
+          </fieldset>}
+          {keyStep === 'setup' && <KeyExpiryPicker choice={expiryChoice} date={expiresOn} maximumDays={policy?.maximum_expiration_days ?? 120} onChange={(nextChoice, nextDate) => { setExpiryChoice(nextChoice); setExpiresOn(nextDate) }} />}
+          {keyStep === 'setup' && purpose && <>
           <section aria-label="Key permissions" className="rounded-xl border border-slate-200">
             <div className="flex items-center gap-1 px-4 py-3"><h3 className="text-sm font-semibold text-slate-900">Access for this key</h3><InfoTooltip label="About key access" text="Choose the entities and actions below. This key cannot exceed your own access." /></div>
             <fieldset className="space-y-5 border-t border-slate-100 p-4"><legend className="sr-only">Choose key permissions</legend>
@@ -698,7 +704,7 @@ export function MyApiKeysPage() {
           </section>
           </>}
         </div>
-        <div data-dialog-footer className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" aria-label="Reset API key setup" disabled={busy} onClick={resetCreate} className="icon-first-action rounded-lg border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><RotateCw aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Reset setup</span></button><button type="submit" aria-label="Create key" disabled={busy || !canIssuePurpose || nameConflict} className="icon-first-action rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white transition-colors hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Plus aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">{busy ? 'Creating…' : 'Create key'}</span></button></div>
+        <div data-dialog-footer className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" aria-label={keyStep === 'purpose' ? 'Reset API key setup' : 'Back to key type'} disabled={busy} onClick={keyStep === 'purpose' ? resetCreate : () => setKeyStep('purpose')} className="icon-first-action rounded-lg border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><RotateCw aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">{keyStep === 'purpose' ? 'Reset setup' : 'Back'}</span></button>{keyStep === 'purpose' ? <button type="button" aria-label="Continue to key details" disabled={!purpose} onClick={() => { setError(null); setKeyStep('setup') }} className="icon-first-action rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white disabled:opacity-50"><ChevronRight aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Continue</span></button> : <button type="submit" aria-label="Create key" disabled={busy || !canIssuePurpose || nameConflict} className="icon-first-action rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white transition-colors hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Plus aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">{busy ? 'Creating…' : 'Create key'}</span></button>}</div>
       </form>}
     </dialog>
     <ConfirmDangerModal open={discardConfirmOpen} title="Discard this API key?" description="Your setup has not been saved." confirmLabel="Discard changes" cancelLabel="Keep editing" onCancel={() => setDiscardConfirmOpen(false)} onConfirm={() => { setDiscardConfirmOpen(false); setCreateOpen(false) }} />

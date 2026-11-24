@@ -24,6 +24,7 @@ async function reviewAndCreateKey() {
 async function openCreate(purpose: 'qbo' | 'entities' = 'entities') {
   fireEvent.click(await screen.findByRole('button', { name: 'Create API key' }))
   fireEvent.click(screen.getByRole('button', { name: purpose === 'qbo' ? /QuickBooks operations/ : /Direct entity operations/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Continue to key details' }))
 }
 
 function mockKeyApi(initialKeys: Array<Record<string, unknown>> = [], initialGrants: Record<string, Array<Record<string, unknown>>> = {}, userGrants: Array<Record<string, unknown>> = [{ id: 'grant-1', operation: 'client.read', client_id: 'client-1', environment: null }]) {
@@ -160,6 +161,7 @@ describe('user-owned API keys', () => {
     expect(screen.getByRole('button', { name: 'Create API key' }).querySelector('.icon-first-label')).toHaveTextContent('Create API key')
     fireEvent.click(screen.getByRole('button', { name: 'Create API key' }))
     fireEvent.click(screen.getByRole('button', { name: /Direct entity operations/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to key details' }))
     const createDialog = screen.getByRole('dialog', { name: 'Create API key' })
     expect(createDialog).toBeInTheDocument()
     expect(createDialog).toHaveClass('overflow-hidden')
@@ -401,6 +403,7 @@ describe('user-owned API keys', () => {
     expect(screen.queryByRole('dialog', { name: 'Discard this API key?' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Create API key' }))
     fireEvent.click(screen.getByRole('button', { name: /Direct entity operations/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to key details' }))
     fireEvent.change(screen.getByLabelText('Key name'), { target: { value: 'Worker' } })
     fireEvent.click(screen.getByRole('button', { name: 'Close API key setup' }))
     expect(screen.getByRole('dialog', { name: 'Discard this API key?' })).toBeInTheDocument()
@@ -424,13 +427,13 @@ describe('user-owned API keys', () => {
     fireEvent.click(screen.getByRole('button', { name: '30 days' }))
     fireEvent.click(screen.getByRole('button', { name: /All entities.*Current and future/ }))
     expect(screen.getByRole('button', { name: 'Read QBO' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Back to key type' }))
     fireEvent.click(screen.getByRole('button', { name: 'Reset API key setup' }))
     expect(screen.getByRole('dialog', { name: 'Create API key' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Key name')).toHaveValue('')
-    expect(screen.getByRole('button', { name: 'No expiration' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByLabelText('Key name')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Direct entity operations/ })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.queryByRole('button', { name: 'Selected entities' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Create key' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Continue to key details' })).toBeDisabled()
     expect(requests.filter((request) => request.path.endsWith('/access/keys') && request.init?.method === 'POST')).toHaveLength(0)
   })
 

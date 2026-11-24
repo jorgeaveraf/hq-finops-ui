@@ -54,7 +54,7 @@ export function KeyExpiryPicker({ choice, date, maximumDays, onChange }: {
     <div ref={calendarRef} className="mt-3"><div className="flex flex-wrap gap-2">{options.map((option) => <button key={option.value} type="button" aria-pressed={choice === option.value} aria-expanded={option.value === 'custom' ? calendarOpen : undefined} onClick={() => { if (option.value === 'custom') setCalendarOpen((open) => !open); else { setCalendarOpen(false); onChange(option.value, option.value === 'never' ? '' : daysFromToday(Number(option.value))) } }} className={`rounded-lg border px-3 py-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal ${choice === option.value ? 'border-hq-teal bg-teal-50 font-semibold text-hq-teal' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'}`}>{option.label}</button>)}</div>{calendarOpen && <div className="mt-3 w-full max-w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-sm" aria-label="Choose expiration date">
       <div className="mb-3 flex items-center justify-between gap-2">
         <button type="button" aria-label="Previous month" disabled={previousMonth < earliestMonth} onClick={() => setMonth(previousMonth)} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-30"><ChevronLeft aria-hidden="true" size={16} /></button>
-        <span className="font-semibold text-slate-900">{month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+        <span className="font-semibold text-slate-900">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
         <button type="button" aria-label="Next month" disabled={nextMonth > latestMonth} onClick={() => setMonth(nextMonth)} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-30"><ChevronRight aria-hidden="true" size={16} /></button>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-xs text-slate-500" aria-hidden="true">{['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => <span key={index} className="py-1">{day}</span>)}</div>
@@ -62,9 +62,9 @@ export function KeyExpiryPicker({ choice, date, maximumDays, onChange }: {
         if (!day) return <span key={`empty-${index}`} />
         const value = new Date(month.getFullYear(), month.getMonth(), day)
         const selected = date === dateValue(value)
-        return <button key={day} type="button" aria-label={value.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} aria-pressed={selected} disabled={value < today || value > maximum} onClick={() => { onChange('custom', dateValue(value)); setCalendarOpen(false) }} className={`aspect-square rounded-lg text-sm focus-visible:outline focus-visible:outline-hq-teal disabled:text-slate-300 ${selected ? 'bg-hq-teal font-semibold text-white' : 'text-slate-800 hover:bg-teal-50'}`}>{day}</button>
+        return <button key={day} type="button" aria-label={value.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} aria-pressed={selected} disabled={value < today || value > maximum} onClick={() => { onChange('custom', dateValue(value)); setCalendarOpen(false) }} className={`aspect-square rounded-lg text-sm focus-visible:outline focus-visible:outline-hq-teal disabled:text-slate-300 ${selected ? 'bg-hq-teal font-semibold text-white' : 'text-slate-800 hover:bg-teal-50'}`}>{day}</button>
       })}</div>
-      <p className="mt-3 text-xs text-slate-600">{date ? `Expires ${new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Select a date to continue.'}</p>
+      <p className="mt-3 text-xs text-slate-600">{date ? `Expires ${new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Select a date to continue.'}</p>
     </div>}</div>
   </fieldset>
 }

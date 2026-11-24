@@ -51,23 +51,6 @@ body {
   .activity-filters { display: grid; grid-template-columns: 1fr 1fr; }
   .activity-filters label { grid-column: 1 / -1; min-width: 0; }
 }
-.reference-tooltip { position: relative; display: inline-flex; }
-.reference-hint, .reference-popover {
-  position: absolute; right: 0; z-index: 45;
-  border: 1px solid #dbe4ee; border-radius: .625rem;
-  background: white; color: #334155;
-  box-shadow: 0 10px 26px #0f172a1c;
-}
-.reference-hint {
-  bottom: calc(100% + 6px); width: max-content; padding: .375rem .625rem;
-  font-size: .75rem; font-weight: 500; pointer-events: none;
-  visibility: hidden; opacity: 0; transition: opacity .12s;
-}
-.reference-trigger:is(:hover, :focus-visible) ~ .reference-hint { visibility: visible; opacity: 1; }
-.reference-popover { bottom: calc(100% + 6px); width: min(19rem, 75vw); padding: .75rem; }
-.reference-popover-below { top: calc(100% + 6px); bottom: auto; }
-.reference-popover-label { display: block; margin-bottom: .5rem; color: #64748b; font-size: .6875rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.reference-popover-value { display: flex; align-items: center; gap: .5rem; }
 
 /* Secondary contextual actions reveal their label on hover or keyboard focus. */
 .icon-first-action { display: inline-flex; min-width: 40px; min-height: 40px; align-items: center; justify-content: center; gap: 0; white-space: nowrap; }
@@ -163,5 +146,3 @@ body {
 :root[data-theme='dark'] .focus\:ring-hq-teal\/20:focus { --tw-ring-color: #7199ae66; }
 :root[data-theme='dark'] :is(button, a, input, select, summary, [tabindex]):focus-visible { outline-color: var(--theme-accent); }
 :root[data-theme='dark'] .access-view :is(button, a, input, select, summary, [tabindex]):focus-visible { outline-color: var(--theme-accent); }
-:root[data-theme='dark'] :is(.reference-hint, .reference-popover) { background: var(--theme-surface); color: var(--theme-text-secondary); border-color: var(--theme-border); }
-:root[data-theme='dark'] .reference-popover-label { color: var(--theme-text-muted); }

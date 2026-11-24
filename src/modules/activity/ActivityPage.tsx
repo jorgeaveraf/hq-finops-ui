@@ -1,8 +1,8 @@
 import { Fragment, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Copy } from 'lucide-react'
 import { FilterDropdown } from '../../components/FilterDropdown'
+import { InfoTooltip } from '../../components/InfoTooltip'
 import { ActivityDateFilter } from './ActivityDateFilter'
-import { ReferenceTooltip } from './ReferenceTooltip'
 import { apiRequest } from '../../api/finopsApi'
 import { AuthContext } from '../auth/AuthContext'
 
@@ -24,6 +24,20 @@ type ActivityItem = {
   action: string
   category: 'read' | 'create' | 'update' | 'delete' | 'other'
   status: 'completed' | 'denied' | 'failed' | 'unknown'
+}
+
+function CopyValue({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopied(false)
+    }
+  }
+  return <button type="button" aria-label={copied ? 'Copied' : label} onClick={() => void copy()} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-hq-teal hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal">{copied ? <Check aria-hidden="true" className="h-4 w-4" /> : <Copy aria-hidden="true" className="h-4 w-4" />}</button>
 }
 type ActivityPageResponse = { items: ActivityItem[]; next_cursor: string | null; total_count?: number | null }
 type Filters = { from: string; to: string; actorEmail: string; category: string }
@@ -87,7 +101,6 @@ export function ActivityPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actors, setActors] = useState<string[]>([])
-  const [openReferenceId, setOpenReferenceId] = useState<string | null>(null)
   const totalCount = page?.total_count
   const lastPage = typeof totalCount === 'number' ? Math.max(1, Math.ceil(totalCount / pageSize)) : null
 
@@ -119,7 +132,6 @@ export function ActivityPage() {
   }, [page, loading, error])
 
   const applyFilters = (next: Filters) => {
-    setOpenReferenceId(null)
     pageChangePendingRef.current = false
     setLoading(true)
     setPageNumber(1)
@@ -129,7 +141,6 @@ export function ActivityPage() {
 
   const changeScope = (next: Scope) => {
     if (next === scope) return
-    setOpenReferenceId(null)
     pageChangePendingRef.current = false
     setLoading(true)
     setPageNumber(1)
@@ -144,7 +155,6 @@ export function ActivityPage() {
   }
 
   const changePage = (next: number) => {
-    setOpenReferenceId(null)
     pageChangePendingRef.current = true
     setLoading(true)
     setPageNumber(next)
@@ -160,7 +170,7 @@ export function ActivityPage() {
   }
 
   return <div className="access-view activity-view mx-auto max-w-6xl space-y-5">
-    <div><h1 className="text-2xl font-semibold text-slate-900">Activity</h1><p className="mt-1 text-sm text-slate-600">Showing the last 15 days. History is kept for 30 days.</p></div>
+    <div className="flex items-center gap-1"><h1 className="text-2xl font-semibold text-slate-900">Activity</h1><InfoTooltip label="About Activity history" text="Showing the last 15 days. History is kept for 30 days." /></div>
     <section aria-label="Activity filters" className="rounded-xl border border-slate-200 bg-white">
       <div className="flex flex-wrap items-center justify-between gap-x-4 border-b border-slate-200 px-4" >
         <div className="flex gap-6" role="group" aria-label="Activity view">
@@ -180,8 +190,8 @@ export function ActivityPage() {
     {loading && !page ? <p role="status" className="text-sm text-slate-600">Loading activity…</p> : error ? null : !page?.items.length ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-sm"><p className="font-medium text-slate-900">No activity found</p><p className="mt-1 text-slate-600">{scope === 'qbo_transactions' ? 'No QBO transactions match these filters. Check All activity.' : 'Try another person, operation, or date range.'}</p></div> : <div aria-busy={loading} aria-label="Activity history" className="rounded-xl border border-slate-200 bg-white">
       <div className={loading ? 'opacity-60' : undefined}>{page.items.map((item, index) => {
         const date = new Date(item.occurred_at)
-        const day = date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
-        const previousDay = index ? new Date(page.items[index - 1].occurred_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : null
+        const day = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        const previousDay = index ? new Date(page.items[index - 1].occurred_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : null
         const description = describeAction(item.action)
         const action = nameKnownPerson(description, item, user)
         const actor = item.actor_name || (user?.email?.toLowerCase() === item.actor.toLowerCase() && user.name ? user.name : item.actor)
@@ -194,24 +204,23 @@ export function ActivityPage() {
                 <p className="break-words text-sm leading-5 text-slate-900"><span className="font-semibold" title={item.actor}>{actor}</span> <span>{action}</span>.</p>
                 {target && <p className="mt-0.5 text-xs text-slate-600">Related to {target}</p>}
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
-                  <time className="tabular-nums" dateTime={item.occurred_at} aria-label={date.toLocaleString()}>{date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</time>
+                  <time className="tabular-nums" dateTime={item.occurred_at} aria-label={date.toLocaleString('en-US')}>{date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</time>
                   {item.key_name && <><span aria-hidden="true">·</span><span>Using API key {item.key_name}</span></>}
                   {item.environment && <><span aria-hidden="true">·</span><span>{item.environment === 'prod' ? 'Production' : item.environment === 'sandbox' ? 'Sandbox' : item.environment}</span></>}
                 </div>
               </div>
-              {item.reference_id && <ReferenceTooltip reference={item.reference_id} open={openReferenceId === item.id} anotherOpen={openReferenceId !== null} onToggle={() => setOpenReferenceId((current) => current === item.id ? null : item.id)} onClose={() => setOpenReferenceId((current) => current === item.id ? null : current)} />}
             </div>
-            {item.record_type && <details className="group mt-2 text-xs text-slate-600">
+            {(item.record_type || item.reference_id) && <details className="group mt-2 text-xs text-slate-600">
               <summary className="w-fit cursor-pointer list-none font-medium text-hq-teal hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal">Details <span aria-hidden="true" className="inline-block transition-transform group-open:rotate-90">›</span></summary>
               <dl className="mt-2 grid gap-x-6 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
-                <div><dt className="text-slate-500">Result</dt><dd className="font-medium text-slate-800">{item.status === 'completed' ? 'Completed' : item.status}</dd></div>
-                <div><dt className="text-slate-500">QuickBooks record</dt><dd className="font-medium text-slate-800">{item.record_type}{item.record_name ? ` · ${item.record_name}` : ''}</dd></div>
+                {item.record_type && item.status !== 'completed' && <div><dt className="text-slate-500">Result</dt><dd className="font-medium text-slate-800">{item.status}</dd></div>}
+                {item.record_type && <div><dt className="text-slate-500">QuickBooks record</dt><dd className="font-medium text-slate-800">{item.record_type}{item.record_name ? ` · ${item.record_name}` : ''}</dd></div>}
                 {item.record_id && <div><dt className="text-slate-500">QuickBooks ID</dt><dd className="break-all font-medium text-slate-800">{item.record_id}</dd></div>}
                 {item.linked_payment_id && <div><dt className="text-slate-500">Linked payment ID</dt><dd className="break-all font-medium text-slate-800">{item.linked_payment_id}</dd></div>}
                 {item.client_name && <div><dt className="text-slate-500">Entity</dt><dd className="font-medium text-slate-800">{item.client_name}</dd></div>}
                 {item.environment && <div><dt className="text-slate-500">Environment</dt><dd className="font-medium text-slate-800">{item.environment === 'prod' ? 'Production' : item.environment === 'sandbox' ? 'Sandbox' : item.environment}</dd></div>}
                 {item.key_name && <div><dt className="text-slate-500">API key</dt><dd className="font-medium text-slate-800">{item.key_name}</dd></div>}
-                {item.reference_id && <div className="sm:col-span-2"><dt className="text-slate-500">Support reference</dt><dd className="break-all font-mono text-slate-800">{item.reference_id}</dd></div>}
+                {item.reference_id && <div className="sm:col-span-2"><dt className="text-slate-500">Support reference</dt><dd className="mt-1 flex items-center gap-2 break-all font-mono text-slate-800"><span>{item.reference_id}</span><CopyValue value={item.reference_id} label="Copy support reference" /></dd></div>}
               </dl>
             </details>}
           </article>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronDown, Power, PowerOff, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, Copy, Power, PowerOff, RefreshCw, Trash2 } from 'lucide-react'
 import { Alert } from '../../../components/Alert'
 import { Card } from '../../../components/Card'
 import { ConfirmDangerModal } from '../../../components/ConfirmDangerModal'
@@ -33,6 +33,7 @@ export function ClientDetailPage({ readOnly = false, canUpdate = true, canDelete
   const [isChangingStatus, setIsChangingStatus] = useState(false)
   const [statusError, setStatusError] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [copiedEntityId, setCopiedEntityId] = useState(false)
   const statusActionRef = useRef<HTMLButtonElement>(null)
   const authorizationStartedAt = useRef<number | null>(null)
 
@@ -220,7 +221,7 @@ export function ClientDetailPage({ readOnly = false, canUpdate = true, canDelete
               <ChevronDown className="h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-180" aria-hidden="true" />
             </summary>
             <div className="space-y-4 border-t border-slate-100 px-6 py-5">
-              <div><p className="text-[11px] font-semibold uppercase text-slate-500">Entity ID</p><code className="mt-1 block break-all text-sm text-slate-900">{clientIdentifier}</code></div>
+              <div><p className="text-[11px] font-semibold uppercase text-slate-500">Entity ID</p><div className="mt-1 flex items-center gap-2"><code className="break-all text-sm text-slate-900">{clientIdentifier}</code><button type="button" aria-label={copiedEntityId ? 'Entity ID copied' : 'Copy entity ID'} onClick={() => { void navigator.clipboard.writeText(clientIdentifier).then(() => { setCopiedEntityId(true); window.setTimeout(() => setCopiedEntityId(false), 2000) }).catch(() => setCopiedEntityId(false)) }} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-hq-teal hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal">{copiedEntityId ? <Check aria-hidden="true" className="h-4 w-4" /> : <Copy aria-hidden="true" className="h-4 w-4" />}</button></div></div>
               <div>
                 <p className="text-[11px] font-semibold uppercase text-slate-500">Realm ID</p>
                 {connectionRows.length > 1 ? connectionRows.map(({ environment, credential }) => <p key={environment} className="mt-1 break-all text-sm text-slate-900"><span className="font-medium text-slate-600">{environment}:</span> {credential?.realm_id || '—'}</p>) : <code className="mt-1 block break-all text-sm text-slate-900">{connectionRows[0]?.credential?.realm_id || '—'}</code>}
@@ -238,18 +239,18 @@ export function ClientDetailPage({ readOnly = false, canUpdate = true, canDelete
             </div>
           </details>
 
-          {(canUpdate || canDelete) && client.source !== 'demo' && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3">
-            {canUpdate && (recordStatus === 'active' ? <button ref={statusActionRef} type="button" onClick={() => setShowDeactivateModal(true)} disabled={isChangingStatus || isDeleting} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 disabled:opacity-50"><PowerOff aria-hidden="true" className="h-4 w-4" />Deactivate entity</button> : recordStatus === 'inactive' ? <button ref={statusActionRef} type="button" onClick={() => void handleStatusChange('active')} disabled={isChangingStatus || isDeleting} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-hq-teal hover:bg-hq-teal/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Power aria-hidden="true" className="h-4 w-4" />{isChangingStatus ? 'Activating...' : 'Activate entity'}</button> : <span />)}
+          {(canUpdate || canDelete) && client.source !== 'demo' && <div className="rounded-xl border border-slate-200 bg-white px-5 py-4"><div className="flex flex-wrap items-center gap-3"><div className="min-w-0 flex-1"><h2 className="text-sm font-semibold text-slate-900">Entity actions</h2><p className="text-xs text-slate-600">Changes to this entity require confirmation.</p></div><div className="flex flex-wrap items-center gap-2">
+            {canUpdate && (recordStatus === 'active' ? <button ref={statusActionRef} type="button" onClick={() => setShowDeactivateModal(true)} disabled={isChangingStatus || isDeleting} className="icon-first-action rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 disabled:opacity-50"><PowerOff aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Deactivate entity</span></button> : recordStatus === 'inactive' ? <button ref={statusActionRef} type="button" onClick={() => void handleStatusChange('active')} disabled={isChangingStatus || isDeleting} className="icon-first-action rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-hq-teal hover:bg-hq-teal/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Power aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">{isChangingStatus ? 'Activating...' : 'Activate entity'}</span></button> : <span />)}
             {canDelete && <button
               type="button"
               onClick={() => setShowDeleteModal(true)}
               disabled={isDeleting}
-              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 disabled:opacity-50"
+              className="icon-first-action rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 disabled:opacity-50"
             >
               <Trash2 className="h-4 w-4" aria-hidden="true" />
-              Delete entity
+              <span className="icon-first-label">Delete entity</span>
             </button>}
-          </div>}
+          </div></div></div>}
         </>
       ) : !error ? (
         <Card>
