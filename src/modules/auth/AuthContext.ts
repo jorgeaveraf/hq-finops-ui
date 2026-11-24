@@ -14,7 +14,7 @@ export type AccessGrant = {
 }
 
 export type MyAccess = {
-  user: { id: string; role: 'Admin' | 'Operator' | 'Viewer'; status: string }
+  user: { id: string; role: 'Admin' | 'Operator' | 'Viewer'; status: string; is_super_admin?: boolean; is_super_admin_founder?: boolean }
   effective_grants: AccessGrant[]
 }
 

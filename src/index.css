@@ -34,3 +34,134 @@ body {
 .label {
   @apply text-sm font-medium text-slate-700;
 }
+
+/* Scoped to the governed-access views; operational screens keep their styling. */
+.access-view { min-width: 0; }
+.access-view .text-hq-teal { color: #0f6d6d; }
+.access-view .bg-hq-teal { background-color: #0f6d6d; }
+.access-view :is(button, a, input, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid #148c8b;
+  outline-offset: 3px;
+}
+.access-view button { min-height: 36px; }
+.access-view button:disabled { cursor: not-allowed; }
+.access-view :is(input, select):disabled { background: #f8fafc; color: #64748b; }
+.activity-view { container-type: inline-size; }
+@container (max-width: 580px) {
+  .activity-filters { display: grid; grid-template-columns: 1fr 1fr; }
+  .activity-filters label { grid-column: 1 / -1; min-width: 0; }
+}
+.reference-tooltip { position: relative; display: inline-flex; }
+.reference-hint, .reference-popover {
+  position: absolute; right: 0; z-index: 45;
+  border: 1px solid #dbe4ee; border-radius: .625rem;
+  background: white; color: #334155;
+  box-shadow: 0 10px 26px #0f172a1c;
+}
+.reference-hint {
+  bottom: calc(100% + 6px); width: max-content; padding: .375rem .625rem;
+  font-size: .75rem; font-weight: 500; pointer-events: none;
+  visibility: hidden; opacity: 0; transition: opacity .12s;
+}
+.reference-trigger:is(:hover, :focus-visible) ~ .reference-hint { visibility: visible; opacity: 1; }
+.reference-popover { bottom: calc(100% + 6px); width: min(19rem, 75vw); padding: .75rem; }
+.reference-popover-below { top: calc(100% + 6px); bottom: auto; }
+.reference-popover-label { display: block; margin-bottom: .5rem; color: #64748b; font-size: .6875rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.reference-popover-value { display: flex; align-items: center; gap: .5rem; }
+
+/* Secondary contextual actions reveal their label on hover or keyboard focus. */
+.icon-first-action { display: inline-flex; min-width: 40px; min-height: 40px; align-items: center; justify-content: center; gap: 0; white-space: nowrap; }
+.icon-first-action > svg { flex: none; }
+.icon-first-label { overflow: hidden; white-space: nowrap; }
+@media (hover: hover) and (pointer: fine) {
+  .icon-first-label { max-width: 0; margin-left: 0; opacity: 0; transition: max-width .2s ease, margin-left .2s ease, opacity .15s ease; }
+  .icon-first-action:is(:hover, :focus-visible, [aria-expanded="true"]) > .icon-first-label { max-width: 14rem; margin-left: .5rem; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon-first-label { transition: none; }
+}
+
+/* The light utilities above remain the source of truth. These semantic dark
+   mappings keep every route, including dialogs portaled to body, on one theme. */
+:root {
+  --theme-surface: #fff;
+  --theme-text: #0f1f2d;
+  --theme-border: #e2e8f0;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --theme-page: #111722;
+  --theme-surface: #1e2632;
+  --theme-surface-soft: #252f3d;
+  --theme-surface-hover: #303c4d;
+  --theme-text: #edf1f6;
+  --theme-text-secondary: #c7d0dc;
+  --theme-text-muted: #a7b4c3;
+  --theme-border: #445267;
+  --theme-border-soft: #354256;
+  --theme-accent: #a4c9db;
+  --theme-accent-fill: #285d76;
+  --theme-accent-border: #7199ae;
+  --theme-selected: #2d3848;
+  background: var(--theme-page);
+}
+:root[data-theme='dark'] body {
+  background: var(--theme-page);
+  color: var(--theme-text);
+}
+:root[data-theme='dark'] :is(.bg-hq-gray) { background-color: var(--theme-page); }
+:root[data-theme='dark'] :is(.bg-white, .bg-white\/60) { background-color: var(--theme-surface); }
+:root[data-theme='dark'] :is(.bg-white\/90, .bg-slate-50, .bg-slate-50\/50, .bg-slate-50\/60) { background-color: var(--theme-surface-soft); }
+:root[data-theme='dark'] :is(.bg-slate-100, .bg-slate-200) { background-color: var(--theme-surface-hover); }
+:root[data-theme='dark'] :is(.text-slate-950, .text-slate-900) { color: var(--theme-text); }
+:root[data-theme='dark'] :is(.text-slate-800, .text-slate-700) { color: var(--theme-text-secondary); }
+:root[data-theme='dark'] :is(.text-slate-600, .text-slate-500, .text-slate-400) { color: var(--theme-text-muted); }
+:root[data-theme='dark'] :is(.border-slate-100, .divide-slate-100) { border-color: var(--theme-border-soft); }
+:root[data-theme='dark'] :is(.border-slate-200, .border-slate-300, .border-slate-400, .divide-slate-200) { border-color: var(--theme-border); }
+:root[data-theme='dark'] :is(.divide-slate-100, .divide-slate-200) > :not([hidden]) ~ :not([hidden]) { border-color: var(--theme-border-soft); }
+:root[data-theme='dark'] :is(.bg-teal-50, .bg-teal-50\/70, .bg-teal-100, .bg-hq-teal\/5, .bg-hq-teal\/10, .bg-hq-teal\/15) { background-color: var(--theme-selected); }
+:root[data-theme='dark'] :is(.text-hq-teal, .text-teal-900, .access-view .text-hq-teal) { color: var(--theme-accent); }
+:root[data-theme='dark'] :is(.bg-hq-teal, .access-view .bg-hq-teal) { background-color: var(--theme-accent-fill); }
+:root[data-theme='dark'] .bg-hq-tealDark { background-color: #224e64; }
+:root[data-theme='dark'] :is(.border-hq-teal, .border-teal-200, .border-teal-300) { border-color: var(--theme-accent-border); }
+:root[data-theme='dark'] :is(.ring-hq-teal, .ring-hq-teal\/30) { --tw-ring-color: var(--theme-accent-border); }
+:root[data-theme='dark'] .bg-emerald-50 { background-color: #203730; }
+:root[data-theme='dark'] :is(.text-emerald-700, .text-emerald-800) { color: #94d6ad; }
+:root[data-theme='dark'] .border-emerald-100 { border-color: #456c58; }
+:root[data-theme='dark'] .bg-blue-50 { background-color: #213149; }
+:root[data-theme='dark'] .text-blue-800 { color: #a9c9f5; }
+:root[data-theme='dark'] .border-blue-100 { border-color: #49617f; }
+:root[data-theme='dark'] .bg-amber-50 { background-color: #392f20; }
+:root[data-theme='dark'] :is(.text-amber-700, .text-amber-800, .text-amber-900, .text-amber-950) { color: #f5cd84; }
+:root[data-theme='dark'] :is(.border-amber-100, .border-amber-200, .border-amber-300) { border-color: #806545; }
+:root[data-theme='dark'] .bg-rose-50 { background-color: #422832; }
+:root[data-theme='dark'] :is(.text-rose-600, .text-rose-700, .text-rose-800, .text-red-700) { color: #ffadb6; }
+:root[data-theme='dark'] :is(.border-rose-100, .border-rose-200, .border-rose-400, .border-rose-500) { border-color: #955363; }
+:root[data-theme='dark'] :is(.ring-rose-100, .ring-rose-500\/30) { --tw-ring-color: #955363; }
+:root[data-theme='dark'] :is(.placeholder\:text-slate-400)::placeholder { color: var(--theme-text-muted); }
+:root[data-theme='dark'] :is(input, textarea, select) { color-scheme: dark; }
+:root[data-theme='dark'] :is(input:not([type='checkbox']):not([type='radio']), textarea, select):not(.bg-transparent) {
+  background-color: var(--theme-surface);
+  color: var(--theme-text);
+}
+:root[data-theme='dark'] :is(input, textarea, select)::placeholder { color: var(--theme-text-muted); }
+:root[data-theme='dark'] .access-view :is(input, select):disabled { background: var(--theme-surface-soft); color: var(--theme-text-muted); }
+:root[data-theme='dark'] :is(.disabled\:bg-slate-50:disabled) { background-color: var(--theme-surface-soft); }
+:root[data-theme='dark'] :is(.disabled\:text-slate-300:disabled, .disabled\:text-slate-500:disabled) { color: var(--theme-text-muted); }
+:root[data-theme='dark'] :is(.hover\:bg-slate-50:hover, .hover\:bg-slate-100:hover, .hover\:bg-slate-200:hover, .hover\:bg-white:hover, .hover\:bg-white\/60:hover) { background-color: var(--theme-surface-hover); }
+:root[data-theme='dark'] :is(.hover\:bg-teal-50:hover, .hover\:bg-teal-50\/40:hover, .hover\:bg-hq-teal\/5:hover, .hover\:bg-hq-teal\/10:hover) { background-color: var(--theme-surface-hover); }
+:root[data-theme='dark'] :is(.hover\:bg-amber-50:hover) { background-color: #4b3a23; }
+:root[data-theme='dark'] :is(.hover\:bg-rose-50:hover) { background-color: #57303b; }
+:root[data-theme='dark'] :is(.hover\:bg-teal-800:hover, .hover\:bg-hq-tealDark:hover) { background-color: #34728c; }
+:root[data-theme='dark'] :is(.hover\:text-slate-900:hover, .hover\:text-slate-800:hover) { color: var(--theme-text); }
+:root[data-theme='dark'] .hover\:text-slate-600:hover { color: var(--theme-text-secondary); }
+:root[data-theme='dark'] .hover\:text-hq-teal:hover { color: #c0dbe8; }
+:root[data-theme='dark'] .hover\:text-amber-950:hover { color: #ffe1a6; }
+:root[data-theme='dark'] .focus-visible\:bg-teal-50:focus-visible { background-color: var(--theme-selected); }
+:root[data-theme='dark'] :is(.focus\:border-hq-teal:focus, .hover\:border-hq-teal\/40:hover) { border-color: var(--theme-accent-border); }
+:root[data-theme='dark'] .focus\:ring-hq-teal\/20:focus { --tw-ring-color: #7199ae66; }
+:root[data-theme='dark'] :is(button, a, input, select, summary, [tabindex]):focus-visible { outline-color: var(--theme-accent); }
+:root[data-theme='dark'] .access-view :is(button, a, input, select, summary, [tabindex]):focus-visible { outline-color: var(--theme-accent); }
+:root[data-theme='dark'] :is(.reference-hint, .reference-popover) { background: var(--theme-surface); color: var(--theme-text-secondary); border-color: var(--theme-border); }
+:root[data-theme='dark'] .reference-popover-label { color: var(--theme-text-muted); }

@@ -5,6 +5,6 @@ export function RequireUsersAdmin() {
   const { kind, access, isLoading } = useAuth()
   if (isLoading) return <p className="p-8 text-sm text-slate-600">Checking access...</p>
   const permitted = kind === 'google' && access?.user.role === 'Admin'
-    && access.effective_grants.some((grant) => grant.operation === 'users.admin' && !grant.client_id && !grant.environment)
+    && access.effective_grants.some((grant) => grant.operation === 'access.manage' && !grant.client_id && !grant.environment)
   return permitted ? <Outlet /> : <Navigate to="/access" replace />
 }

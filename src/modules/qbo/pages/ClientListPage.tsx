@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useSearchParams } from 'react-router-dom'
-import { ChevronDown, Plus, RefreshCcw } from 'lucide-react'
+import { Check, ChevronDown, Plus, RefreshCcw } from 'lucide-react'
 import { Alert } from '../../../components/Alert'
 import { Button } from '../../../components/Button'
 import { Card } from '../../../components/Card'
@@ -22,6 +22,8 @@ export type ClientListContext = {
   error: string | null
   reloadClients: () => Promise<void>
 }
+
+type ListReturnState = { returnTo: string; restoreList: { search: string; expandedGroups: Record<string, boolean> } }
 
 function createdTime(entity: QboClient) {
   const time = Date.parse(entity.created_at || '')
@@ -91,10 +93,12 @@ function compareEntities(left: QboClient, right: QboClient, sort: SortOrder) {
 }
 
 export function ClientListPage({ readOnly = false }: { readOnly?: boolean }) {
+  const location = useLocation()
+  const restoredList = (location.state as { restoreList?: ListReturnState['restoreList'] } | null)?.restoreList
   const [clients, setClients] = useState<QboClient[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
-  const [search, setSearch] = useState('')
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => restoredList?.expandedGroups ?? {})
+  const [search, setSearch] = useState(() => restoredList?.search ?? '')
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false)
   const [customRangeEditing, setCustomRangeEditing] = useState(false)
   const [draftFrom, setDraftFrom] = useState('')
@@ -104,8 +108,11 @@ export function ClientListPage({ readOnly = false }: { readOnly?: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const requestId = useRef(0)
   const [searchParams, setSearchParams] = useSearchParams()
+  const overviewView = searchParams.get('view')
   const connectionParam = searchParams.get('connection')
   const connectionFilter: ConnectionFilter = connectionParam === 'connected' || connectionParam === 'reconnect-needed' || connectionParam === 'unavailable' ? connectionParam : 'all'
+  const previousView = useRef(overviewView)
+  useEffect(() => { if (previousView.current !== overviewView) { previousView.current = overviewView; setExpandedGroups({}) } }, [overviewView])
   const today = localDateISO(new Date())
   const createdParam = searchParams.get('created')
   const requestedFrom = searchParams.get('from') || ''
@@ -119,7 +126,6 @@ export function ClientListPage({ readOnly = false }: { readOnly?: boolean }) {
   const sortParam = searchParams.get('sort')
   const sort: SortOrder = sortParam === 'name-desc' || sortParam === 'created-desc' || sortParam === 'created-asc' ? sortParam : 'name-asc'
   const createLinkRef = useRef<HTMLAnchorElement>(null)
-  const location = useLocation()
   const successMessage = (location.state as { message?: string } | null)?.message ?? null
   const restoreCreateFocus = (location.state as { restoreCreateFocus?: boolean } | null)?.restoreCreateFocus ?? false
 
@@ -238,7 +244,7 @@ export function ClientListPage({ readOnly = false }: { readOnly?: boolean }) {
       : nameCollator.compare(left.label, right.label) * (sort === 'name-desc' ? -1 : 1)
     return primary || nameCollator.compare(left.label, right.label)
   })
-  const defaultExpanded = clientGroups.length + Number(hasUnassigned) <= 5 || Boolean(searchTerm)
+  const defaultExpanded = overviewView === 'entities' ? true : overviewView === 'clients' ? false : clientGroups.length + Number(hasUnassigned) <= 5 || Boolean(searchTerm)
   const isExpanded = (groupKey: string) => expandedGroups[groupKey] ?? defaultExpanded
   const allExpanded = visibleGroups.every((group) => isExpanded(group.key))
 
@@ -249,14 +255,14 @@ export function ClientListPage({ readOnly = false }: { readOnly?: boolean }) {
           <p className="text-xs font-semibold uppercase text-hq-teal">Clients & Integrations</p>
           <h1 className="text-2xl font-bold text-slate-900">QuickBooks Online entities</h1>
         </div>
-        {!readOnly && <Button asChild icon={<Plus className="h-4 w-4" />}>
-          <Link ref={createLinkRef} to="/qbo/clients/new">Create entity</Link>
+        {!readOnly && <Button asChild className="icon-first-action" icon={<Plus className="h-4 w-4" />}>
+          <Link ref={createLinkRef} to="/qbo/clients/new" aria-label="Create entity"><Plus aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Create entity</span></Link>
         </Button>}
       </div>
 
       <Card
         title="Entities"
-        titleSuffix={<InfoTooltip label="About this entity list" text="Search entities and clients, or filter by creation date and QuickBooks connection." />}
+        titleSuffix={<InfoTooltip label="About this entity list" text="Only entities you can access appear here. Search or filter by creation date and QuickBooks connection." />}
         actions={<span className="self-start rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{entityCountText}</span>}
       >
         {error && <div className="space-y-2"><Alert title="Unable to load entities" description={error} variant="error" /><Button type="button" variant="secondary" size="sm" onClick={() => void reloadClients()}>Try again</Button></div>}
@@ -273,8 +279,8 @@ export function ClientListPage({ readOnly = false }: { readOnly?: boolean }) {
               <p className="font-semibold text-slate-900">No entities found</p>
               <p>{readOnly ? 'No permitted entities are available.' : 'Create an entity under a client to start the QuickBooks connection flow.'}</p>
             </div>
-            {!readOnly && <Button asChild size="sm" icon={<Plus className="h-4 w-4" />}>
-              <Link to="/qbo/clients/new">Create entity</Link>
+            {!readOnly && <Button asChild size="sm" className="icon-first-action" icon={<Plus className="h-4 w-4" />}>
+              <Link to="/qbo/clients/new" aria-label="Create entity"><Plus aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Create entity</span></Link>
             </Button>}
           </div>
         ) : (
@@ -328,7 +334,7 @@ export function ClientListPage({ readOnly = false }: { readOnly?: boolean }) {
                   {draftHasFutureDate && <p role="alert" className="mt-2 text-sm text-red-700">Dates cannot be in the future.</p>}
                   <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
                     <button type="button" onClick={closeCustomRange} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-hq-teal">Cancel</button>
-                    <button type="button" disabled={!draftRangeValid} onClick={() => { if (!draftRangeValid) return; setSearchParams((current) => { const next = new URLSearchParams(current); next.set('created', 'custom'); next.set('from', draftFrom); next.set('to', draftTo); return next }); closeCustomRange() }} className="rounded-lg bg-hq-teal px-3 py-2 text-sm font-semibold text-white hover:bg-hq-tealDark focus-visible:outline focus-visible:outline-2 focus-visible:outline-hq-teal disabled:cursor-not-allowed disabled:opacity-50">Apply range</button>
+                    <button type="button" disabled={!draftRangeValid} onClick={() => { if (!draftRangeValid) return; setSearchParams((current) => { const next = new URLSearchParams(current); next.set('created', 'custom'); next.set('from', draftFrom); next.set('to', draftTo); return next }); closeCustomRange() }} className="inline-flex items-center gap-2 rounded-lg bg-hq-teal px-3 py-2 text-sm font-semibold text-white hover:bg-hq-tealDark focus-visible:outline focus-visible:outline-2 focus-visible:outline-hq-teal disabled:cursor-not-allowed disabled:opacity-50"><Check aria-hidden="true" className="h-4 w-4" />Apply range</button>
                   </div>
                 </div>}
               </div>
@@ -384,6 +390,7 @@ export function ClientListPage({ readOnly = false }: { readOnly?: boolean }) {
                       group={group}
                       collapsed={!isExpanded(group.key)}
                       onToggle={() => setExpandedGroups((current) => ({ ...current, [group.key]: !(current[group.key] ?? defaultExpanded) }))}
+                      returnState={{ returnTo: `${location.pathname}${location.search}`, restoreList: { search, expandedGroups } }}
                     />
                   </li>
                 ))}
@@ -397,10 +404,11 @@ export function ClientListPage({ readOnly = false }: { readOnly?: boolean }) {
   )
 }
 
-function ClientGroup({ group, collapsed, onToggle }: {
+function ClientGroup({ group, collapsed, onToggle, returnState }: {
   group: { key: string; label: string; entities: QboClient[] }
   collapsed: boolean
   onToggle: () => void
+  returnState: ListReturnState
 }) {
   const panelId = `client-group-${encodeURIComponent(group.key)}`
   const count = group.entities.length
@@ -423,14 +431,14 @@ function ClientGroup({ group, collapsed, onToggle }: {
       </h3>
       <ul id={panelId} hidden={collapsed} className="divide-y divide-slate-100 border-t border-slate-200" aria-label={`${group.label} entities`}>
         {group.entities.map((entity) => (
-          <EntityRow key={getClientId(entity)} entity={entity} />
+          <EntityRow key={getClientId(entity)} entity={entity} returnState={returnState} />
         ))}
       </ul>
     </section>
   )
 }
 
-function EntityRow({ entity }: { entity: QboClient }) {
+function EntityRow({ entity, returnState }: { entity: QboClient; returnState: ListReturnState }) {
   const entityId = getClientId(entity)
   const recordStatus = getClientRecordStatus(entity)
   const kind: QboConnectionState = entity.connection_state ?? 'unavailable'
@@ -442,6 +450,7 @@ function EntityRow({ entity }: { entity: QboClient }) {
     <li>
       <Link
         to={`/qbo/clients/${entityId}`}
+        state={returnState}
         aria-label={getClientName(entity)}
         className="group grid min-h-14 grid-cols-1 gap-x-4 gap-y-2 px-4 py-3 pl-11 transition-colors hover:bg-hq-teal/5 focus-visible:relative focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-hq-teal sm:grid-cols-[minmax(0,1fr)_11rem] sm:items-center"
       >

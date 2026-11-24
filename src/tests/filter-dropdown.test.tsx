@@ -49,4 +49,14 @@ describe('filter dropdown', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Client All clients' })).toHaveFocus()
   })
+
+  it('closes with Escape when focus remains on the trigger', () => {
+    render(<Fixture />)
+    const trigger = screen.getByRole('button', { name: 'Client All clients' })
+    fireEvent.click(trigger)
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'Escape' })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
 })

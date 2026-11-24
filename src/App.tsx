@@ -19,22 +19,24 @@ import { ClientDetailPage } from './modules/qbo/pages/ClientDetailPage'
 import { CreateClientPage } from './modules/qbo/pages/CreateClientPage'
 import { AppLayout } from './layout/AppLayout'
 
-function ClientsRoute() {
-  const { kind } = useAuth()
-  return <ClientListPage readOnly={kind === 'google'} />
+export function ClientsRoute() {
+  const { kind, role, access } = useAuth()
+  const canManageEntities = kind === 'local' ? role === 'admin'
+    : kind === 'google' && access?.user.role === 'Admin' && access.effective_grants.some((grant) => grant.operation === 'entities.manage' && !grant.client_id && !grant.environment)
+  return <ClientListPage readOnly={!canManageEntities} />
 }
 
-function ClientDetailRoute() {
+export function ClientDetailRoute() {
   const { kind, access } = useAuth()
   const grants = access?.effective_grants || []
   const { clientId } = useParams<{ clientId: string }>()
   const permitted = (operation: string) => grants.some((grant) => grant.operation === operation
     && !grant.environment && (!grant.client_id || grant.client_id === clientId))
+  const canConnect = access?.user.role !== 'Viewer' && (permitted('client.read') || permitted('qbo.entity.read'))
   return <ClientDetailPage
-    canUpdate={kind === 'local' || (access?.user.role !== 'Viewer' && permitted('client.update'))}
-    canEditDetails={kind === 'google' && access?.user.role !== 'Viewer' && permitted('client.update')}
-    canDelete={kind === 'local' || (access?.user.role === 'Admin' && permitted('client.delete'))}
-    canManageConnection={kind === 'local'}
+    canUpdate={kind === 'local' || (access?.user.role === 'Admin' && permitted('entities.manage') && (permitted('client.read') || permitted('qbo.entity.read')))}
+    canDelete={kind === 'local' || (access?.user.role === 'Admin' && permitted('entities.manage') && (permitted('client.read') || permitted('qbo.entity.read')))}
+    canManageConnection={kind === 'local' || canConnect}
   />
 }
 
@@ -45,7 +47,7 @@ function App() {
         <Toaster
           position="top-right"
           toastOptions={{
-            style: { fontSize: '14px', fontWeight: 500 },
+            style: { fontSize: '14px', fontWeight: 500, background: 'var(--theme-surface)', color: 'var(--theme-text)', border: '1px solid var(--theme-border)' },
             success: { iconTheme: { primary: '#1FA196', secondary: '#fff' } },
           }}
         />
