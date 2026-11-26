@@ -1,10 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertCircle, ArrowUpRight, Building2, CheckCircle2 } from 'lucide-react'
+import { Activity, AlertCircle, ArrowUpRight, Building2, CheckCircle2, UserRound, Users } from 'lucide-react'
 import { apiRequest } from '../../api/finopsApi'
 import { Alert } from '../../components/Alert'
 import { Card } from '../../components/Card'
-import { InfoTooltip } from '../../components/InfoTooltip'
 import { useAuth } from '../auth/useAuth'
 
 type Overview = {
@@ -19,20 +18,55 @@ type Overview = {
   disconnectedClients: { id: string; name: string; environment: string }[]
   partial: boolean
 }
+type RecentActivity = { action: string; actor: string; actor_name?: string | null; occurred_at: string; status: string }
+type ActivitySnapshot = { total: number | null; latest: RecentActivity | null }
+type PeopleSnapshot = { total: number; awaiting: number; paused: number }
 
 export function DashboardPage() {
-  const { role } = useAuth()
+  const { role, kind, access } = useAuth()
+  const canReadClients = kind === 'google'
+    ? Boolean(access?.effective_grants.some((grant) => ['client.read', 'qbo.entity.read', 'entities.manage'].includes(grant.operation)))
+    : role === 'admin'
+  const canViewActivity = kind === 'google' && access?.user.role === 'Admin'
+    && Boolean(access.effective_grants.some((grant) => grant.operation === 'activity.read' && !grant.client_id && !grant.environment))
+  const canManagePeople = kind === 'google' && access?.user.role === 'Admin'
+    && Boolean(access.effective_grants.some((grant) => grant.operation === 'access.manage' && !grant.client_id && !grant.environment))
   const [overview, setOverview] = useState<Overview | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [activitySnapshot, setActivitySnapshot] = useState<ActivitySnapshot | null>(null)
+  const [peopleSnapshot, setPeopleSnapshot] = useState<PeopleSnapshot | null>(null)
+  const [activityError, setActivityError] = useState(false)
+  const [peopleError, setPeopleError] = useState(false)
 
   useEffect(() => {
-    if (role !== 'admin') return
+    if (!canReadClients) return
     let mounted = true
     apiRequest<Overview>('/overview')
       .then((data) => { if (mounted) setOverview(data) })
       .catch(() => { if (mounted) setError('Saved connection status could not be loaded.') })
     return () => { mounted = false }
-  }, [role])
+  }, [canReadClients])
+
+  useEffect(() => {
+    if (!canViewActivity) return
+    let mounted = true
+    apiRequest<{ total_count?: number | null; items?: RecentActivity[] }>('/access/activity/summary?limit=1&scope=qbo_transactions&page=1')
+      .then((data) => { if (mounted) setActivitySnapshot({ total: typeof data.total_count === 'number' ? data.total_count : null, latest: data.items?.[0] ?? null }) })
+      .catch(() => { if (mounted) setActivityError(true) })
+    return () => { mounted = false }
+  }, [canViewActivity])
+
+  useEffect(() => {
+    if (!canManagePeople) return
+    let mounted = true
+    apiRequest<{ id: string; status: string; sub: string | null }[]>('/access/users')
+      .then((users) => { if (mounted && Array.isArray(users)) {
+        const managed = users.filter((user) => user.id !== access?.user.id)
+        setPeopleSnapshot({ total: managed.length, awaiting: managed.filter((user) => user.status === 'active' && !user.sub).length, paused: managed.filter((user) => user.status !== 'active').length })
+      } })
+      .catch(() => { if (mounted) setPeopleError(true) })
+    return () => { mounted = false }
+  }, [canManagePeople, access?.user.id])
 
   const needsVerification = overview
     ? overview.notChecked + overview.unavailable + overview.noCredential
@@ -41,33 +75,27 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center gap-2 py-1">
-        <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">Financial operations overview</h1>
-        <InfoTooltip
-          label="About financial operations overview"
-          text="A high-level view of your financial operations, including clients, integrations, and items from the QBO Gateway"
-          align="right"
-        />
+      <header className="py-1">
+        <h1 className="text-2xl font-bold leading-none text-slate-900 md:text-3xl">FinOps Console</h1>
+        <p className="mt-1 text-sm font-medium text-slate-600">QBO Gateway</p>
       </header>
 
-      {role !== 'admin' ? (
-        <Card title="Connection overview" description="Administrator access is required to view client connection information.">
-          <p className="text-sm text-slate-600">Contact an administrator if you need access.</p>
+      {!canReadClients ? (
+        <Card title="Connection overview" description="Entity access is required to view connection information.">
+          <p className="text-sm text-slate-600">Ask an administrator to assign access to an entity.</p>
         </Card>
       ) : (
-        <Card
-          title={<Link to="/qbo/clients" className="inline-flex items-center rounded-sm hover:text-hq-teal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal">Clients &amp; Integrations</Link>}
-          titleSuffix={<InfoTooltip label="About connection results" text="Summary of QuickBooks connections by status." />}
-        >
+        <section aria-label="Clients & Integrations" className="space-y-3">
+          <h2 className="text-lg font-semibold text-slate-900">Clients & Integrations</h2>
           {error && <Alert title="Overview unavailable" description={error} variant="error" />}
           {!error && !overview && <p className="text-sm text-slate-600" role="status">Loading saved connection status...</p>}
           {overview && (
             <div className="space-y-5">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <Stat label="Clients" value={overview.clientGroups} icon={<Building2 className="h-5 w-5" />} />
-                <Stat label="Entities" value={overview.activeClients} icon={<Building2 className="h-5 w-5" />} />
-                <Stat label="Connected QuickBooks connections" value={overview.connected} icon={<CheckCircle2 className="h-5 w-5" />} tone="success" />
-                <Stat label="Reconnection needed" value={overview.disconnected} icon={<AlertCircle className="h-5 w-5" />} attention={overview.disconnected > 0} />
+                <Stat label="Clients" value={overview.clientGroups} icon={<Building2 className="h-5 w-5" />} to="/qbo/clients?view=clients" />
+                <Stat label="Entities" value={overview.activeClients} icon={<Building2 className="h-5 w-5" />} to="/qbo/clients?view=entities" />
+                <Stat label="Connected QuickBooks connections" value={overview.connected} icon={<CheckCircle2 className="h-5 w-5" />} to="/qbo/clients?view=entities&connection=connected" />
+                <Stat label="Reconnection needed" value={overview.disconnected} icon={<AlertCircle className="h-5 w-5" />} to="/qbo/clients?view=entities&connection=reconnect-needed" attention={overview.disconnected > 0} />
               </div>
 
               {overview.partial && (
@@ -106,17 +134,24 @@ export function DashboardPage() {
               {overview.activeClients === 0 && <p className="text-sm text-slate-600">No active entities are available in this environment.</p>}
             </div>
           )}
-        </Card>
+        </section>
       )}
+      {(canViewActivity || canManagePeople) && <section aria-label="Administration overview" className="space-y-3">
+        <h2 className="text-lg font-semibold text-slate-900">Operations & administration</h2>
+        <div className="grid gap-3 md:grid-cols-2">
+          {canViewActivity && <Link to="/access/activity" className="group min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-hq-teal/50 hover:bg-teal-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal"><div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Activity aria-hidden="true" className="h-4 w-4 text-slate-600" />QBO transactions</div>{activitySnapshot ? <><p className="mt-3 text-xl font-semibold tabular-nums text-slate-900">{activitySnapshot.total === null ? 'Recent QBO transactions' : activitySnapshot.total === 1 ? '1 QBO transaction' : `${activitySnapshot.total} QBO transactions`}</p>{activitySnapshot.latest ? <p className="mt-2 min-w-0 text-sm font-medium text-slate-800">Latest: {activitySnapshot.latest.action} <span className="inline-flex items-center gap-1 whitespace-nowrap text-slate-500">by <UserRound aria-hidden="true" className="h-3.5 w-3.5" />{activitySnapshot.latest.actor_name || activitySnapshot.latest.actor}</span></p> : <p className="mt-2 text-sm text-slate-600">No QBO transactions in the last 15 days.</p>}</> : <p className="mt-3 text-sm text-slate-600">{activityError ? 'Activity summary unavailable.' : 'Loading activity…'}</p>}</Link>}
+          {canManagePeople && <Link to="/access/users" className="group flex min-w-0 items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-hq-teal/50 hover:bg-teal-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal"><div className="min-w-0"><div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Users aria-hidden="true" className="h-4 w-4 text-slate-600" />People and access</div>{peopleSnapshot ? <><p className="mt-3 text-xl font-semibold tabular-nums text-slate-900">{peopleSnapshot.total} {peopleSnapshot.total === 1 ? 'person' : 'people'} managed</p><p className="mt-2 text-sm text-slate-700">{peopleSnapshot.awaiting} awaiting first sign-in · {peopleSnapshot.paused} paused</p></> : <p className="mt-3 text-sm text-slate-600">{peopleError ? 'People summary unavailable.' : 'Loading people…'}</p>}</div></Link>}
+        </div>
+      </section>}
     </div>
   )
 }
 
-function Stat({ label, value, icon, attention = false, tone }: { label: string; value: number; icon: ReactNode; attention?: boolean; tone?: 'success' }) {
+function Stat({ label, value, icon, to, attention = false }: { label: string; value: number; icon: ReactNode; to: string; attention?: boolean }) {
   return (
-    <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4">
-      <div className={`flex items-center gap-2 text-sm font-medium ${attention ? 'text-amber-700' : tone === 'success' ? 'text-emerald-700' : 'text-slate-600'}`}>{icon}{label}</div>
-      <p className={`mt-auto pt-3 text-3xl font-semibold tabular-nums ${tone === 'success' ? 'text-emerald-700' : 'text-slate-900'}`}>{value}</p>
-    </div>
+    <Link to={to} className="group flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-hq-teal/50 hover:bg-teal-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal">
+      <div className={`flex items-center gap-2 text-sm font-medium group-hover:text-hq-teal ${attention ? 'text-amber-700' : 'text-slate-600'}`}>{icon}{label}</div>
+      <p className="mt-auto pt-3 text-3xl font-semibold tabular-nums text-slate-900 group-hover:text-hq-teal">{value}</p>
+    </Link>
   )
 }

@@ -126,7 +126,10 @@ export function FilterDropdown({
         className={`input-base flex min-h-11 items-center justify-between gap-3 text-left hover:border-slate-300 focus-visible:ring-2 focus-visible:ring-hq-teal/30 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 ${error ? 'border-rose-400' : ''} ${className}`}
         onClick={() => open ? setOpen(false) : openAt(Math.max(selectedIndex, 0))}
         onKeyDown={(event) => {
-          if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+          if (event.key === 'Escape' && open) {
+            event.preventDefault()
+            setOpen(false)
+          } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
             event.preventDefault()
             openAt(event.key === 'Home' ? 0 : event.key === 'End' ? allOptions.length - 1
               : selectedIndex >= 0 ? selectedIndex : event.key === 'ArrowUp' ? allOptions.length - 1 : 0)

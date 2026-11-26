@@ -5,6 +5,13 @@
     <link rel="icon" type="image/png" href="/src/assets/hq-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>hq-finops-ui</title>
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem('hq-finops-theme') === 'dark' ? 'dark' : 'light'
+      } catch {
+        document.documentElement.dataset.theme = 'light'
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
