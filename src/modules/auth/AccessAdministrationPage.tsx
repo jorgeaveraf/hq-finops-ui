@@ -9,7 +9,9 @@ export function AccessAdministrationPage() {
   const { access } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [users, setUsers] = useState<AccessUser[]>([])
-  const managedUsers = users.filter((user) => user.id !== access?.user.id)
+  const managedUsers = users.filter((user) => user.id !== access?.user.id
+    && !user.is_super_admin_founder
+    && (!user.is_super_admin || access?.user.is_super_admin_founder))
   const editUserId = searchParams.get('edit')
   const selectedUser = managedUsers.find((user) => user.id === editUserId)
   const [error, setError] = useState<string | null>(null)
@@ -38,7 +40,7 @@ export function AccessAdministrationPage() {
       <div className="divide-y divide-slate-100">{managedUsers.map((user) => <div key={user.id} className="grid grid-cols-2 items-center gap-3 px-5 py-4 md:grid-cols-[minmax(0,1fr)_8rem_9rem] md:gap-4">
         <Link to={`/access/users?edit=${encodeURIComponent(user.id)}`} aria-label={`Change access for ${user.display_name || user.email}`} className="group col-span-2 flex min-w-0 items-center gap-3 rounded-lg hover:text-hq-teal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal md:col-span-1">
           <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-50 text-sm font-semibold text-hq-teal">{(user.display_name || user.email).slice(0,1).toUpperCase()}</span>
-          <div className="min-w-0"><p className="break-words text-sm font-semibold text-slate-900 group-hover:text-hq-teal">{user.display_name || user.email}</p>{user.display_name && <p className="mt-0.5 break-words text-xs text-slate-500">{user.email}</p>}{user.is_super_admin && <span className="mt-1 inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-900">Superadmin{user.is_super_admin_founder ? ' · Founder' : ''}</span>}{!user.sub && <p className="mt-1 text-xs text-slate-500">Awaiting first sign-in</p>}</div>
+          <div className="min-w-0"><p className="break-words text-sm font-semibold text-slate-900 group-hover:text-hq-teal">{user.display_name || user.email}</p>{user.display_name && <p className="mt-0.5 break-words text-xs text-slate-500">{user.email}</p>}{user.is_super_admin && <span className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-hq-teal">Superadmin{user.is_super_admin_founder && <span className="rounded-full bg-teal-50 px-2 py-0.5">Founder</span>}</span>}{!user.sub && <p className="mt-1 text-xs text-slate-500">Awaiting first sign-in</p>}</div>
         </Link>
         <span className="text-sm text-slate-700"><span className="mr-1 text-xs text-slate-500 md:hidden">Role:</span>{user.role}</span>
         <span className={`w-fit rounded-full px-2 py-1 text-xs font-medium ${user.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}><span className="md:hidden">Sign-in: </span>{user.status === 'active' ? 'Allowed' : 'Paused'}</span>
@@ -47,6 +49,6 @@ export function AccessAdministrationPage() {
     </section>
     {adding && <AccessUserEditor key="new-person" creating user={{ id: '', email: '', display_name: null, role: 'Viewer', status: 'active', issuer: null, sub: null }} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); setNotice('Person added with the selected access.'); void loadUsers().then(setUsers).catch((err: Error) => setError(err.message)) }} onDeleted={() => setAdding(false)} />}
     {!loading && editUserId && !selectedUser && <p role="alert" className="rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-800">This person is no longer available. <button type="button" onClick={() => setSearchParams({}, { replace: true })} className="font-semibold underline">Close</button></p>}
-    {selectedUser && <AccessUserEditor key={selectedUser.id} user={selectedUser} onClose={() => setSearchParams({}, { replace: true })} onSaved={() => { setSearchParams({}, { replace: true }); setNotice('Access updated.'); void loadUsers().then(setUsers).catch((err: Error) => setError(err.message)) }} onDeleted={() => { setSearchParams({}, { replace: true }); setNotice('Person deleted. Activity history was retained.'); void loadUsers().then(setUsers).catch((err: Error) => setError(err.message)) }} />}
+    {selectedUser && <AccessUserEditor key={`${selectedUser.id}:${Boolean(selectedUser.is_super_admin)}`} user={selectedUser} onClose={() => setSearchParams({}, { replace: true })} onSaved={() => { setSearchParams({}, { replace: true }); setNotice('Access updated.'); void loadUsers().then(setUsers).catch((err: Error) => setError(err.message)) }} onDeleted={() => { setSearchParams({}, { replace: true }); setNotice('Person deleted. Activity history was retained.'); void loadUsers().then(setUsers).catch((err: Error) => setError(err.message)) }} />}
   </div>
 }

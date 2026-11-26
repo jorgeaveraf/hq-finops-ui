@@ -46,6 +46,25 @@ it('filters by operation and includes successful reads when Read is selected', a
   expect(screen.getByRole('button', { name: 'All activity' })).toHaveAttribute('aria-pressed', 'true')
 })
 
+it('can clear a date filter with Any time', async () => {
+  const requests: string[] = []
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const url = String(input)
+    if (url.endsWith('/access/activity/actors')) return new Response('[]', { status: 200 })
+    requests.push(url)
+    return new Response(JSON.stringify({ items: [], next_cursor: null, total_count: 0 }), { status: 200 })
+  })
+  render(<ActivityPage />)
+  await screen.findByText('No activity found')
+  fireEvent.click(screen.getByRole('button', { name: /^When / }))
+  fireEvent.click(screen.getByRole('option', { name: 'Last 7 days' }))
+  await waitFor(() => expect(requests.at(-1)).toContain('from_at='))
+  fireEvent.click(screen.getByRole('button', { name: /^When / }))
+  fireEvent.click(screen.getByRole('option', { name: 'Any time' }))
+  await waitFor(() => expect(requests.at(-1)).not.toContain('from_at='))
+  expect(screen.getByRole('button', { name: 'When Any time' })).toBeInTheDocument()
+})
+
 it('shows the QuickBooks record and a concise audit detail', async () => {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     if (String(input).endsWith('/access/activity/actors')) return new Response('[]', { status: 200 })

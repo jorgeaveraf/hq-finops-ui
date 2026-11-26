@@ -45,16 +45,16 @@ const keyState = (key: Key) => key.revoked_at || key.status === 'revoked' ? 'Rev
 const daysUntil = (value: string) => Math.ceil((new Date(value).getTime() - Date.now()) / 86_400_000)
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Request failed'
 const keyIdentity = (key: Key) => `${key.name}${key.secret_suffix ? ` (ending ${key.secret_suffix})` : ''}`
-const keyPurposeLabel = (purpose: Key['purpose']) => purpose === 'qbo' ? 'QBO operations' : purpose === 'entities' ? 'Entity operations' : 'Legacy mixed'
+const keyPurposeLabel = (purpose: Key['purpose']) => purpose === 'qbo' ? 'QuickBooks data' : purpose === 'entities' ? 'QBO Gateway entities' : 'Legacy mixed'
 const normalizedKeyName = (value: string) => value.trim().toLowerCase()
 const duplicateKeyNameMessage = 'An active API key with this name already exists'
 const keyScopeLabels = (operations: string[]) => {
   const choices = new Set(operations)
   const labels: string[] = []
-  if (choices.has('qbo.entity.read')) labels.push(choices.has('qbo.entity.edit') ? 'Read and Edit QBO' : 'Read QBO')
-  else if (choices.has('client.read')) labels.push(operations.some((operation) => operation.startsWith('qbo.') && operation !== 'qbo.entity.edit') ? 'Entity details' : 'Entity details only (no QBO data)')
-  if (choices.has('qbo.entity.edit') && !choices.has('qbo.entity.read')) labels.push('Edit QBO (legacy; no Read QBO)')
-  if (choices.has('qbo.entity.delete')) labels.push('Delete QBO')
+  if (choices.has('qbo.entity.read')) labels.push(choices.has('qbo.entity.edit') ? 'Read · Edit' : 'Read')
+  else if (choices.has('client.read')) labels.push(operations.some((operation) => operation.startsWith('qbo.') && operation !== 'qbo.entity.edit') ? 'Entity details' : 'Entity details only')
+  if (choices.has('qbo.entity.edit') && !choices.has('qbo.entity.read')) labels.push('Edit (legacy; no Read)')
+  if (choices.has('qbo.entity.delete')) labels.push('Delete')
   return [...labels, ...operations.filter((operation) => !isEntityGrant(operation)).map(permissionName)]
 }
 
@@ -134,8 +134,9 @@ export function MyApiKeysPage() {
   const [expiresOn, setExpiresOn] = useState('')
   const [expiryChoice, setExpiryChoice] = useState<ExpiryChoice>('never')
   const [selected, setSelected] = useState<string[]>([])
-  const [scopeMode, setScopeMode] = useState<'all' | 'selected'>('selected')
+  const [scopeMode, setScopeMode] = useState<'all' | 'selected'>('all')
   const [entitySearch, setEntitySearch] = useState('')
+  const [showSelectedEntities, setShowSelectedEntities] = useState(false)
   const [focusedEntityId, setFocusedEntityId] = useState<string | null>(null)
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
   const [pending, setPending] = useState<Pending>(null)
@@ -161,8 +162,9 @@ export function MyApiKeysPage() {
       setExpiryChoice('never')
       setPurpose(null)
       setSelected([])
-      setScopeMode('selected')
+      setScopeMode('all')
       setEntitySearch('')
+      setShowSelectedEntities(false)
       setFocusedEntityId(null)
       setError(null)
       if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus()
@@ -215,7 +217,8 @@ export function MyApiKeysPage() {
   const scopedOperations = [...new Set(sourceGrants.filter((grant) => !grant.client_id && isScopedEntityGrant(grant.operation)).map((grant) => grant.operation))]
   const derivedGrants = clients.flatMap((client) => scopedOperations.map((operation) => ({ operation, client_id: client.id, environment: null })))
   const available = uniqueGrants([...sourceGrants, ...derivedGrants])
-  const createDirty = Boolean(name.trim() || expiresOn || expiryChoice !== 'never' || selected.length || scopeMode !== 'selected')
+  const createDirty = Boolean(purpose || name.trim() || expiresOn || expiryChoice !== 'never' || selected.length)
+  const hasSetupDraft = Boolean(name.trim() || expiresOn || expiryChoice !== 'never')
   const closeCreate = () => {
     if (issued || busy) return
     if (createDirty) setDiscardConfirmOpen(true)
@@ -262,14 +265,12 @@ export function MyApiKeysPage() {
   const selectedGrants = available.filter((grant) => selectedKeys.has(grantKey(grant)))
   const selectedForPurpose = selectedGrants.filter((grant) => purpose === 'qbo'
     ? grant.operation.startsWith('qbo.') || grant.operation.startsWith('report.')
-    : grant.operation === 'client.read' || grant.operation === 'entities.manage')
+    : grant.operation === 'client.read')
   const canIssuePurpose = purpose === 'qbo'
     ? selectedForPurpose.length > 0
-    : purpose === 'entities' && Boolean(globalManageGrant && selectedKeys.has(grantKey(globalManageGrant)))
-  const selectionLabel = (grant: GrantScope) => [permissionName(grant.operation), grant.client_id ? entityName(grant.client_id) : 'All entities', grant.environment === 'prod' ? 'Production' : grant.environment === 'sandbox' ? 'Sandbox' : null].filter(Boolean).join(' · ')
+    : purpose === 'entities' && Boolean(globalManageGrant && selectedForPurpose.some((grant) => grant.operation === 'client.read'))
   const entityChoices = [...clients].sort((a, b) => a.name.localeCompare(b.name))
     .filter((client) => client.name.toLocaleLowerCase().includes(entitySearch.trim().toLocaleLowerCase()))
-  const visibleEntityChoices = entityChoices.slice(0, 50)
   const selectedEntityActions = new Map<string, number>()
   for (const grant of selectedGrants) {
     if (grant.client_id && isScopedEntityGrant(grant.operation)) {
@@ -277,6 +278,7 @@ export function MyApiKeysPage() {
     }
   }
   const selectedEntityCount = selectedEntityActions.size
+  const visibleEntityChoices = entityChoices.filter((client) => !showSelectedEntities || selectedEntityActions.has(client.id)).slice(0, 50)
   const focusedEntity = entityChoices.find((client) => client.id === focusedEntityId)
   const grantsByEntity = new Map<string, GrantScope[]>()
   for (const grant of available) {
@@ -290,10 +292,6 @@ export function MyApiKeysPage() {
   const preferredEntityGrant = (choices: GrantScope[]) => preferredRead(choices)
   const selectableEntityChoices = entityChoices.filter((client) => preferredEntityGrant(entityGrants(client.id)))
   const selectedEntityIds = [...selectedEntityActions.keys()]
-  const canBulkEdit = selectedEntityIds.length > 0 && selectedEntityIds.every((id) => {
-    const choices = entityGrants(id)
-    return choices.some((grant) => grant.operation === 'qbo.entity.read') && choices.some((grant) => grant.operation === 'qbo.entity.edit')
-  })
   const selectAllEntities = () => setSelected((current) => [...new Set([...current, ...selectableEntityChoices.map((client) => grantKey(preferredEntityGrant(entityGrants(client.id))!))])])
   const entityReadGrants = available.filter((grant) => grant.operation === 'client.read' && grant.client_id)
   const globalEntityReadGrant = available.find((grant) => grant.operation === 'client.read' && !grant.client_id && grant.environment === null)
@@ -304,6 +302,15 @@ export function MyApiKeysPage() {
   })
   const selectedEntityReadCount = globalEntityReadGrant && selectedKeys.has(grantKey(globalEntityReadGrant))
     ? entityReadGrants.length : entityReadGrants.filter((grant) => selectedKeys.has(grantKey(grant))).length
+  const reviewScope = purpose === 'qbo' && scopeMode === 'all' ? 'All current and future entities'
+    : purpose === 'entities' && scopeMode === 'all' && globalEntityReadGrant && selectedKeys.has(grantKey(globalEntityReadGrant)) ? 'All current and future entities'
+      : `${purpose === 'entities' ? selectedEntityReadCount : selectedEntityCount} selected entities`
+  const qboEntityActionSets = selectedEntityIds.map((id) => selectedForPurpose.filter((grant) => grant.client_id === id).map((grant) => grant.operation).sort().join('|'))
+  const qboActionLabels = keyScopeLabels(selectedForPurpose.map((grant) => grant.operation)).join(' · ') || 'No actions selected'
+  const reviewActions = purpose === 'entities' ? scopeMode === 'all' ? 'Create entities · Manage accessible entities' : 'Create entities · Manage selected entities'
+    : scopeMode === 'selected' && new Set(qboEntityActionSets).size > 1 ? `${qboActionLabels} (varies by entity)` : qboActionLabels
+  const reviewExpiration = expiryChoice === 'never' ? 'Until revoked' : expiresOn
+    ? new Date(`${expiresOn}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Choose a date'
   const toggleEntityRead = (grant: GrantScope) => {
     setScopeMode('selected')
     const key = grantKey(grant)
@@ -336,18 +343,27 @@ export function MyApiKeysPage() {
     setSelected((current) => current.filter((key) => !entityKeys.has(key)))
     setFocusedEntityId(null)
   }
-  const setBulkAccessLevel = (edit: boolean) => {
-    if (edit && !canBulkEdit) return
-    const scopeKeys = new Set(selectedEntityIds.flatMap((id) => entityGrants(id).filter((grant) => isEntityGrant(grant.operation)).map(grantKey)))
-    const next = selectedEntityIds.flatMap((id) => {
-      const choices = entityGrants(id)
-      const read = preferredRead(choices)
-      const editGrant = choices.find((grant) => grant.operation === 'qbo.entity.edit')
-      const deleteGrant = choices.find((grant) => grant.operation === 'qbo.entity.delete')
-      const keepDelete = Boolean(deleteGrant && selectedKeys.has(grantKey(deleteGrant)))
-      return read ? [grantKey(read), ...(edit && editGrant ? [grantKey(editGrant)] : []), ...(keepDelete && deleteGrant ? [grantKey(deleteGrant)] : [])] : []
+  const selectedAccessChoices = selectedEntityIds.map(entityGrants)
+  const selectedAccessGrants = {
+    read: selectedAccessChoices.map((choices) => choices.find((grant) => grant.operation === 'qbo.entity.read')),
+    edit: selectedAccessChoices.map((choices) => choices.find((grant) => grant.operation === 'qbo.entity.edit')),
+  }
+  const toggleSelectedAccess = (action: 'read' | 'edit') => {
+    const targets = selectedAccessGrants[action]
+    if (!targets.length || targets.some((grant) => !grant)) return
+    setSelected((current) => {
+      const values = new Set(current)
+      const allOn = targets.every((grant) => grant && values.has(grantKey(grant)))
+      if (allOn) {
+        if (action === 'read' && selectedAccessChoices.some((choices) => choices.some((grant) =>
+          grant.operation === 'qbo.entity.edit' && values.has(grantKey(grant))))) return current
+        targets.forEach((grant) => { if (grant) values.delete(grantKey(grant)) })
+      } else {
+        targets.forEach((grant) => { if (grant) values.add(grantKey(grant)) })
+        if (action !== 'read') selectedAccessGrants.read.forEach((grant) => { if (grant) values.add(grantKey(grant)) })
+      }
+      return [...values]
     })
-    setSelected((current) => [...current.filter((key) => !scopeKeys.has(key)), ...next])
   }
   const chooseEntity = (clientId: string) => {
     setFocusedEntityId(clientId)
@@ -359,35 +375,63 @@ export function MyApiKeysPage() {
     const keys = new Set(entityGrants(clientId).map(grantKey))
     setSelected((current) => current.filter((key) => !keys.has(key)))
   }
-  const toggleGrant = (grant: GrantScope) => {
-    const key = grantKey(grant)
-    setSelected((current) => current.includes(key) ? current.filter((value) => value !== key) : [...current, key])
-  }
-  const setAccessLevel = (choices: GrantScope[], edit: boolean) => {
+  const toggleAccess = (choices: GrantScope[], action: 'read' | 'edit') => {
     const readGrant = choices.find((grant) => grant.operation === 'qbo.entity.read')
     const editGrant = choices.find((grant) => grant.operation === 'qbo.entity.edit')
-    if (!readGrant || (edit && !editGrant)) return
-    const deleteGrant = choices.find((grant) => grant.operation === 'qbo.entity.delete')
-    const keepDelete = Boolean(deleteGrant && selectedKeys.has(grantKey(deleteGrant)))
-    const scopeKeys = new Set(choices.filter((grant) => isEntityGrant(grant.operation)).map(grantKey))
-    setSelected((current) => [...current.filter((key) => !scopeKeys.has(key)), grantKey(readGrant), ...(edit && editGrant ? [grantKey(editGrant)] : []), ...(keepDelete && deleteGrant ? [grantKey(deleteGrant)] : [])])
+    const target = action === 'read' ? readGrant : editGrant
+    if (!readGrant || !target) return
+    setSelected((current) => {
+      const values = new Set(current)
+      const key = grantKey(target)
+      if (values.has(key)) {
+        if (action === 'read' && editGrant && values.has(grantKey(editGrant))) return current
+        values.delete(key)
+      } else {
+        values.add(key)
+        if (action !== 'read') values.add(grantKey(readGrant))
+      }
+      return [...values]
+    })
   }
   const accessLevelControls = (choices: GrantScope[], label: string) => {
     const readGrant = choices.find((grant) => grant.operation === 'qbo.entity.read')
     const editGrant = choices.find((grant) => grant.operation === 'qbo.entity.edit')
-    const deleteGrant = choices.find((grant) => grant.operation === 'qbo.entity.delete')
     if (!readGrant) return <p className="text-sm text-slate-600">Entity details only — no QuickBooks data access is available from your account.</p>
     const hasRead = selectedKeys.has(grantKey(readGrant))
     const hasEdit = Boolean(editGrant && selectedKeys.has(grantKey(editGrant)))
-    return <div role="group" aria-label={`${label} QBO access level`} className="flex flex-wrap gap-2">
-      <button type="button" aria-pressed={hasRead && !hasEdit} onClick={() => setAccessLevel(choices, false)} className={`rounded-lg border px-3 py-2 text-sm font-medium ${hasRead && !hasEdit ? 'border-hq-teal bg-teal-50 text-hq-teal' : 'border-slate-200 text-slate-800 hover:border-slate-400'}`}>Read QBO</button>
-      {editGrant && <button type="button" aria-pressed={hasRead && hasEdit} onClick={() => setAccessLevel(choices, true)} className={`rounded-lg border px-3 py-2 text-sm font-medium ${hasRead && hasEdit ? 'border-hq-teal bg-teal-50 text-hq-teal' : 'border-slate-200 text-slate-800 hover:border-slate-400'}`}>Read and Edit QBO</button>}
-      {deleteGrant && <button type="button" aria-label={`Delete QBO for ${label}`} aria-pressed={selectedKeys.has(grantKey(deleteGrant))} onClick={() => toggleGrant(deleteGrant)} className={`rounded-lg border px-3 py-2 text-sm font-medium ${selectedKeys.has(grantKey(deleteGrant)) ? 'border-rose-300 bg-rose-50 text-rose-800' : 'border-slate-200 text-slate-800 hover:border-slate-400'}`}>Delete QBO</button>}
+    return <div role="group" aria-label={`${label} QBO access level`} className="grid gap-2 sm:grid-cols-2">
+      <button type="button" aria-label="Read" aria-pressed={hasRead} aria-disabled={hasEdit || undefined} disabled={hasEdit} onClick={() => toggleAccess(choices, 'read')} className={`rounded-lg border px-3 py-2.5 text-left text-sm font-semibold ${hasRead ? 'border-hq-teal bg-teal-50 text-hq-teal' : 'border-slate-200 text-slate-800 hover:border-slate-400'} disabled:cursor-default`}>Read{hasRead && hasEdit && <span className="mt-0.5 block text-xs font-normal text-slate-600">Required</span>}</button>
+      {editGrant && <button type="button" aria-pressed={hasEdit} onClick={() => toggleAccess(choices, 'edit')} className={`rounded-lg border px-3 py-2.5 text-left text-sm font-semibold ${hasEdit ? 'border-hq-teal bg-teal-50 text-hq-teal' : 'border-slate-200 text-slate-800 hover:border-slate-400'}`}>Edit</button>}
     </div>
   }
-  const grantButton = (grant: GrantScope, label: string) => {
-    const active = selectedKeys.has(grantKey(grant))
-    return <button key={grantKey(grant)} type="button" aria-label={selectionLabel(grant)} aria-pressed={active} onClick={() => toggleGrant(grant)} className={`min-h-9 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal ${active ? 'border-hq-teal bg-teal-50 text-hq-teal' : 'border-slate-200 bg-white text-slate-800 hover:border-slate-400 hover:bg-slate-50'}`}>{label}</button>
+  const selectedAccessControls = () => {
+    if (!selectedEntityCount) return <p className="text-sm text-slate-500">Select entities to set their access.</p>
+    const hasRead = selectedAccessGrants.read.every((grant) => grant && selectedKeys.has(grantKey(grant)))
+    const hasEdit = selectedAccessGrants.edit.every((grant) => grant && selectedKeys.has(grantKey(grant)))
+    const readRequired = selectedAccessChoices.some((choices) => choices.some((grant) =>
+      grant.operation === 'qbo.entity.edit' && selectedKeys.has(grantKey(grant))))
+    const options = ([['read', 'Read'], ['edit', 'Edit']] as const)
+    return <div role="group" aria-label={`Permissions for ${selectedEntityCount} selected entities`} className="grid gap-2 sm:grid-cols-2">
+      {options.map(([action, label]) => {
+        const unavailable = selectedAccessGrants[action].some((grant) => !grant)
+        const enabled = action === 'read' ? hasRead : hasEdit
+        return <button key={action} type="button" aria-pressed={enabled} disabled={unavailable || action === 'read' && enabled && readRequired} onClick={() => toggleSelectedAccess(action)} className={`flex min-h-11 items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm font-semibold disabled:cursor-default disabled:opacity-60 ${enabled ? 'border-hq-teal bg-teal-50 text-hq-teal' : 'border-slate-200 text-slate-800 hover:border-slate-400'}`}>{label}{enabled && <Check aria-hidden="true" className="h-4 w-4 shrink-0" />}</button>
+      })}
+      {selectedAccessGrants.edit.some((grant) => !grant) && <p className="sm:col-span-2 text-xs text-slate-500">Edit is unavailable for at least one selected entity.</p>}
+    </div>
+  }
+  const choosePurpose = (next: 'qbo' | 'entities') => {
+    setPurpose(next)
+    setShowSelectedEntities(false)
+    setFocusedEntityId(null)
+    if (next === 'qbo') {
+      const globalRead = globalQboGrants.find((grant) => grant.operation === 'qbo.entity.read')
+      setScopeMode(globalRead ? 'all' : 'selected')
+      setSelected(globalRead ? [grantKey(globalRead)] : [])
+    } else {
+      setScopeMode('all')
+      setSelected(globalEntityReadGrant ? [grantKey(globalEntityReadGrant)] : entityReadGrants.map(grantKey))
+    }
   }
   const resetCreate = () => {
     setName('')
@@ -397,8 +441,9 @@ export function MyApiKeysPage() {
     setExpiresOn('')
     setExpiryChoice('never')
     setSelected([])
-    setScopeMode('selected')
+    setScopeMode('all')
     setEntitySearch('')
+    setShowSelectedEntities(false)
     setFocusedEntityId(null)
     setError(null)
   }
@@ -462,18 +507,14 @@ export function MyApiKeysPage() {
     event.preventDefault()
     if (!name.trim()) { setError('Name this key before continuing.'); return }
     if (nameConflict) { setServerNameConflict(true); nameRef.current?.focus(); return }
-    if (!selected.length) { setError('Choose at least one permission.'); return }
+    if (!selected.length) { setError('Choose at least one entity or permission.'); return }
     if (expiryChoice === 'custom' && !expiresOn) { setError('Choose an expiration date.'); return }
     void run(async () => {
       if (!purpose) { setError('Choose a key purpose.'); return }
       const selectedGrants = available.filter((grant) => selected.includes(grantKey(grant)) && (purpose === 'qbo'
         ? grant.operation.startsWith('qbo.') || grant.operation.startsWith('report.')
-        : grant.operation === 'client.read' || grant.operation === 'entities.manage'))
+        : grant.operation === 'client.read'))
         .map(({ operation, client_id, environment }) => ({ operation, client_id, environment }))
-      if (purpose === 'entities' && globalManageGrant && !selectedGrants.some((grant) => grant.operation === 'entities.manage')) {
-        setError('Select Manage entities for an entity operations key.')
-        return
-      }
       let result: IssuedKey
       try {
         result = await apiRequest<IssuedKey>('/access/keys', {
@@ -536,7 +577,7 @@ export function MyApiKeysPage() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 className="sr-only">Your API keys</h1>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">{policy && <span className="text-sm font-medium text-slate-700">{policy.active_count} of {policy.active_limit} active</span>}{expiringKeys.length > 0 && <button type="button" onClick={() => setInfoOpen('expiring')} className="inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-sm font-medium text-amber-800 underline decoration-amber-400 underline-offset-4 hover:text-amber-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700"><Clock3 aria-hidden="true" size={16} />{expiringKeys.length} {expiringKeys.length === 1 ? 'key expires' : 'keys expire'} within 30 days</button>}</div>
-        <button type="button" aria-label="Create API key" disabled={loading || busy || !sourceGrants.length || !!policy && policy.active_count >= policy.active_limit} onClick={() => { setError(null); setSelected([]); setPurpose(null); setKeyStep('purpose'); setScopeMode('selected'); setFocusedEntityId(null); setEntitySearch(''); setCreateOpen(true) }} className="icon-first-action ml-auto rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Plus aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Create API key</span></button>
+        <button type="button" aria-label="Create API key" disabled={loading || busy || !sourceGrants.length || !!policy && policy.active_count >= policy.active_limit} onClick={() => { setError(null); setSelected([]); setPurpose(null); setKeyStep('purpose'); setScopeMode('all'); setFocusedEntityId(null); setEntitySearch(''); setCreateOpen(true) }} className="icon-first-action ml-auto rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Plus aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Create API key</span></button>
       </div>
       {!loading && activeKeys.length > 1 && <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm" aria-label="Filter API keys">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -621,11 +662,12 @@ export function MyApiKeysPage() {
         <div className="mt-6 flex justify-end border-t border-slate-200 pt-4"><button type="button" disabled={busy} onClick={() => setIssued(null)} className="rounded-lg bg-hq-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Done</button></div>
       </div> : <form onSubmit={create} className="flex max-h-[90dvh] min-w-0 flex-col">
         <div data-dialog-header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
-          <div><h2 className="text-xl font-semibold text-slate-950">Create an API key</h2><p className="mt-1 text-sm text-slate-600">{keyStep === 'purpose' ? 'Choose one dedicated purpose for this key.' : 'Name the integration and define its access.'}</p></div>
+          <h2 className="text-xl font-semibold text-slate-950">Create an API key</h2>
           <button type="button" aria-label="Close API key setup" disabled={busy} onClick={closeCreate} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-hq-teal disabled:opacity-50"><X aria-hidden="true" className="h-4 w-4" /></button>
         </div>
-        <div role="group" aria-label="API key setup steps" className="grid grid-cols-2 border-b border-slate-200 px-6"><button type="button" aria-current={keyStep === 'purpose' ? 'step' : undefined} onClick={() => setKeyStep('purpose')} className={`border-b-2 py-3 text-sm font-semibold ${keyStep === 'purpose' ? 'border-hq-teal text-hq-teal' : 'border-transparent text-slate-600'}`}>1 · Key type</button><button type="button" aria-current={keyStep === 'setup' ? 'step' : undefined} disabled={!purpose} onClick={() => setKeyStep('setup')} className={`border-b-2 py-3 text-sm font-semibold disabled:opacity-50 ${keyStep === 'setup' ? 'border-hq-teal text-hq-teal' : 'border-transparent text-slate-600'}`}>2 · Details & access</button></div>
-        <div data-dialog-body className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-6 py-5">
+        <div role="group" aria-label="API key setup steps" className="grid grid-cols-2 border-b border-slate-200 px-6"><button type="button" aria-current={keyStep === 'purpose' ? 'step' : undefined} onClick={() => setKeyStep('purpose')} className={`border-b-2 py-3 text-sm font-semibold ${keyStep === 'purpose' ? 'border-hq-teal text-hq-teal' : 'border-transparent text-slate-600'}`}>1 · Purpose</button><button type="button" aria-current={keyStep === 'setup' ? 'step' : undefined} disabled={!purpose} onClick={() => setKeyStep('setup')} className={`border-b-2 py-3 text-sm font-semibold disabled:opacity-50 ${keyStep === 'setup' ? 'border-hq-teal text-hq-teal' : 'border-transparent text-slate-600'}`}>2 · Details & access</button></div>
+        {keyStep === 'setup' && purpose && <div data-key-purpose className="shrink-0 border-b border-slate-100 bg-white px-6 py-3 text-sm"><span className="mr-2 text-slate-600">Key purpose</span><span className="font-semibold text-hq-teal">{purpose === 'qbo' ? 'Work with QuickBooks data' : 'Administer QBO Gateway entities'}</span></div>}
+        <div data-dialog-body className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-6 py-5">
           {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
           {keyStep === 'setup' && <>
           <label className="block text-sm font-medium text-slate-800">Key name
@@ -635,53 +677,51 @@ export function MyApiKeysPage() {
           </>}
           {keyStep === 'purpose' &&
           <fieldset>
-            <legend className="text-sm font-semibold text-slate-900">What will this key do?</legend>
-            <p className="mt-1 text-sm text-slate-600">Choose one purpose. Permissions for the other purpose cannot be added to this key.</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <button type="button" aria-pressed={purpose === 'qbo'} onClick={() => { setPurpose('qbo'); setSelected([]); setScopeMode('selected') }} className={`rounded-lg border p-4 text-left ${purpose === 'qbo' ? 'border-hq-teal bg-teal-50' : 'border-slate-200 hover:bg-slate-50'}`}>
-                <span className="block text-sm font-semibold">QuickBooks operations</span><span className="mt-1 block text-xs text-slate-600">Read, edit, or delete QBO data for selected entities.</span>
+            <legend className="text-base font-semibold text-slate-950">Choose a purpose</legend>
+            <p className="mt-1 text-sm text-slate-600">Each key has one purpose. Choose what this key needs to do.</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <button type="button" aria-pressed={purpose === 'qbo'} onClick={() => choosePurpose('qbo')} className={`group flex min-h-40 flex-col rounded-xl border p-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal ${purpose === 'qbo' ? 'border-hq-teal bg-teal-50 ring-1 ring-hq-teal' : 'border-slate-200 bg-white hover:border-hq-teal hover:bg-slate-50'}`}>
+                <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${purpose === 'qbo' ? 'bg-white text-hq-teal' : 'bg-slate-100 text-slate-600'}`}><KeyRound aria-hidden="true" className="h-5 w-5" /></span>
+                <span className="mt-4 block text-sm font-semibold text-slate-950">Work with QuickBooks data</span><span className="mt-1 block text-xs leading-5 text-slate-600">Read or update QuickBooks records, such as customers, invoices, and vendors, for authorized entities.</span>
               </button>
-              <button type="button" aria-pressed={purpose === 'entities'} onClick={() => { setPurpose('entities'); setSelected([]); setScopeMode('selected') }} className={`rounded-lg border p-4 text-left ${purpose === 'entities' ? 'border-hq-teal bg-teal-50' : 'border-slate-200 hover:bg-slate-50'}`}>
-                <span className="block text-sm font-semibold">Direct entity operations</span><span className="mt-1 block text-xs text-slate-600">Create entities anywhere; update or delete entities within this key’s entity access.</span>
+              <button type="button" aria-pressed={purpose === 'entities'} disabled={!globalManageGrant} onClick={() => choosePurpose('entities')} className={`group flex min-h-40 flex-col rounded-xl border p-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:cursor-not-allowed disabled:opacity-60 ${purpose === 'entities' ? 'border-hq-teal bg-teal-50 ring-1 ring-hq-teal' : 'border-slate-200 bg-white hover:border-hq-teal hover:bg-slate-50'}`}>
+                <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${purpose === 'entities' ? 'bg-white text-hq-teal' : 'bg-slate-100 text-slate-600'}`}><Settings2 aria-hidden="true" className="h-5 w-5" /></span>
+                <span className="mt-4 block text-sm font-semibold text-slate-950">Administer QBO Gateway entities</span><span className="mt-1 block text-xs leading-5 text-slate-600">Create or manage entities registered in QBO Gateway. Does not allow reading or changing their QuickBooks records.</span>
+                {!globalManageGrant && <span className="mt-auto pt-3 text-xs font-medium text-slate-600">Requires Manage entities permission</span>}
               </button>
             </div>
           </fieldset>}
           {keyStep === 'setup' && <KeyExpiryPicker choice={expiryChoice} date={expiresOn} maximumDays={policy?.maximum_expiration_days ?? 120} onChange={(nextChoice, nextDate) => { setExpiryChoice(nextChoice); setExpiresOn(nextDate) }} />}
           {keyStep === 'setup' && purpose && <>
-          <section aria-label="Key permissions" className="rounded-xl border border-slate-200">
-            <div className="flex items-center gap-1 px-4 py-3"><h3 className="text-sm font-semibold text-slate-900">Access for this key</h3><InfoTooltip label="About key access" text="Choose the entities and actions below. This key cannot exceed your own access." /></div>
-            <fieldset className="space-y-5 border-t border-slate-100 p-4"><legend className="sr-only">Choose key permissions</legend>
+          <section aria-label="Key permissions">
+            <div className="mb-3 flex items-center gap-1"><h3 className="text-sm font-semibold text-slate-900">Access for this key</h3><InfoTooltip label="About key access" placement="top" text={purpose === 'entities' ? 'This key cannot exceed your own access. It can create new entities; updating or deleting existing ones is limited to the entities selected below.' : 'Choose the entities and actions below. This key cannot exceed your own access.'} /></div>
+            <fieldset><legend className="sr-only">Choose key permissions</legend>
                 {purpose === 'qbo' && globalQboGrants.length > 0 && <div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Entity scope</p><div className="grid gap-2 sm:grid-cols-2"><button type="button" aria-pressed={scopeMode === 'all'} onClick={() => switchScope('all')} className={`rounded-lg border px-4 py-3 text-left text-sm font-semibold ${scopeMode === 'all' ? 'border-hq-teal bg-teal-50 text-hq-teal' : 'border-slate-200 text-slate-900 hover:bg-slate-50'}`}>All entities<span className="mt-0.5 block text-xs font-normal text-slate-600">Current and future</span></button><button type="button" aria-label="Selected entities" aria-pressed={scopeMode === 'selected'} disabled={!clients.length} onClick={() => switchScope('selected')} className={`rounded-lg border px-4 py-3 text-left text-sm font-semibold disabled:opacity-50 ${scopeMode === 'selected' ? 'border-hq-teal bg-teal-50 text-hq-teal' : 'border-slate-200 text-slate-900 hover:bg-slate-50'}`}>Selected entities<span className="mt-0.5 block text-xs font-normal text-slate-600">{clientsLoading ? 'Loading…' : clients.length ? `${clients.length} available` : 'No entities available'}</span></button></div>{clientLoadError && <p role="alert" className="mt-2 text-xs text-rose-700">Could not load entities. Try again after reopening this page.</p>}</div>}
-                {purpose === 'qbo' && scopeMode === 'all' && globalQboGrants.length > 0 && <div><p className="mb-2 text-sm font-semibold text-slate-900">QBO access for all entities</p>{accessLevelControls(globalQboGrants, 'All entities')}</div>}
-                {purpose === 'qbo' && scopeMode === 'selected' && <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                {purpose === 'qbo' && scopeMode === 'all' && globalQboGrants.length > 0 && <div className="mt-5"><p className="mb-2 text-sm font-semibold text-slate-900">Permissions for all entities</p>{accessLevelControls(globalQboGrants, 'All entities')}</div>}
+                {purpose === 'qbo' && scopeMode === 'selected' && <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex items-baseline justify-between gap-2"><p className="text-sm font-semibold text-slate-900">Entities</p><span className="text-xs text-slate-500">{selectedEntityCount} with access</span></div>
-                    <p className="mt-1 text-xs text-slate-500">Choose an entity, then set its QBO access level.</p>
+                    <div className="flex items-baseline justify-between gap-2"><p className="text-sm font-semibold text-slate-900">Entities</p><span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-hq-teal">{selectedEntityCount} selected</span></div>
                     <label className="sr-only" htmlFor="key-entity-search">Find an entity</label>
-                    <input id="key-entity-search" type="search" value={entitySearch} onChange={(event) => setEntitySearch(event.target.value)} placeholder="Find an entity" className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-hq-teal focus:outline-none" />
-                    <div role="group" aria-label="Bulk entity selection" className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-slate-200 pb-2 text-xs font-semibold">
+                    <input id="key-entity-search" type="search" value={entitySearch} onChange={(event) => setEntitySearch(event.target.value)} placeholder="Search entities" className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-hq-teal focus:outline-none" />
+                    <div role="group" aria-label="Bulk entity selection" className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-slate-200 pb-3 text-xs font-semibold">
                       <button type="button" disabled={!selectableEntityChoices.length || selectableEntityChoices.every((client) => selectedEntityActions.has(client.id))} onClick={selectAllEntities} className="text-hq-teal hover:underline disabled:cursor-not-allowed disabled:opacity-50">{entitySearch.trim() ? `Select all ${selectableEntityChoices.length} matches` : `Select all ${selectableEntityChoices.length} entities`}</button>
                       <button type="button" disabled={!selectedEntityCount} onClick={clearEntitySelection} className="text-slate-600 hover:text-slate-900 hover:underline disabled:cursor-not-allowed disabled:opacity-50">Clear selection</button>
+                      <button type="button" aria-pressed={showSelectedEntities} disabled={!selectedEntityCount && !showSelectedEntities} onClick={() => setShowSelectedEntities((current) => !current)} className={`ml-auto rounded-md px-2 py-1 disabled:opacity-40 ${showSelectedEntities ? 'bg-white text-hq-teal shadow-sm' : 'text-slate-600 hover:bg-white'}`}>{showSelectedEntities ? 'Show all' : 'Show selected'}</button>
                     </div>
                     <div className="mt-2 max-h-56 space-y-1 overflow-y-auto pr-1">{visibleEntityChoices.map((client) => {
                       const count = selectedEntityActions.get(client.id) ?? 0
-                      return <button key={client.id} type="button" aria-label={`Select ${client.name}`} aria-pressed={count > 0} onClick={() => chooseEntity(client.id)} className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm ${focusedEntity?.id === client.id ? 'border-hq-teal bg-teal-50 text-hq-teal' : 'border-transparent text-slate-900 hover:bg-white'}`}><span className="truncate font-medium">{client.name}</span>{count > 0 && <span className="shrink-0 text-xs text-slate-600">{keyScopeLabels(selectedGrants.filter((grant) => grant.client_id === client.id).map((grant) => grant.operation)).join(' · ')}</span>}</button>
-                    })}{!entityChoices.length && <p className="py-3 text-sm text-slate-500">No matching entities</p>}</div>
-                    {entityChoices.length > visibleEntityChoices.length && <p className="mt-2 text-xs text-slate-500">Showing {visibleEntityChoices.length} of {entityChoices.length}. Search to find another entity.</p>}
+                      return <button key={client.id} type="button" aria-label={`Select ${client.name}`} aria-pressed={count > 0} onClick={() => chooseEntity(client.id)} className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-left text-sm ${focusedEntity?.id === client.id ? 'border-hq-teal bg-teal-50 text-slate-950' : 'border-transparent text-slate-900 hover:bg-white'}`}><span className="min-w-0 truncate font-medium">{client.name}</span><span className="flex shrink-0 items-center gap-2">{count > 0 && <span className="text-xs text-slate-600">{keyScopeLabels(selectedGrants.filter((grant) => grant.client_id === client.id).map((grant) => grant.operation)).join(' · ')}</span>}<span className="flex h-5 w-5 items-center justify-center">{count > 0 && <Check aria-hidden="true" className="h-4 w-4 text-hq-teal" />}</span></span></button>
+                    })}{!visibleEntityChoices.length && <p className="py-3 text-sm text-slate-500">{showSelectedEntities ? 'No selected entities match your search.' : 'No matching entities'}</p>}</div>
+                    {entityChoices.length > visibleEntityChoices.length && !showSelectedEntities && <p className="mt-2 text-xs text-slate-500">Showing the first 50. Search to find another entity.</p>}
                   </div>
                   <div className="rounded-lg border border-slate-200 p-4">
-                    {selectedEntityCount > 1 && <div role="group" aria-label="Bulk QBO access level" className="mb-4 border-b border-slate-200 pb-4">
-                      <p className="text-sm font-semibold text-slate-900">Apply to {selectedEntityCount} selected</p>
-<div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => setBulkAccessLevel(false)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-800 hover:border-hq-teal hover:bg-teal-50">Read QBO</button><button type="button" disabled={!canBulkEdit} onClick={() => setBulkAccessLevel(true)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-800 hover:border-hq-teal hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50">Read and Edit QBO</button></div>
-                      {!canBulkEdit && <p className="mt-2 text-xs text-slate-500">Edit is unavailable for at least one selected entity.</p>}
-                    </div>}
-                    <div className="flex items-center justify-between gap-2"><p className="text-sm font-semibold text-slate-900">{focusedEntity?.name ?? 'Choose an entity'}</p>{focusedEntity && selectedGrants.some((grant) => grant.client_id === focusedEntity.id && isScopedEntityGrant(grant.operation)) && <button type="button" onClick={() => removeEntity(focusedEntity.id)} className="text-xs font-medium text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline">Remove access</button>}</div>
-          <p className="mt-1 text-xs text-slate-500">{focusedEntity ? 'Read also makes this entity visible in FinOps. Managing entities is separate.' : 'Select one on the left to grant its available access.'}</p>
-                    <div className="mt-4">{focusedEntity && accessLevelControls(entityGrants(focusedEntity.id), focusedEntity.name)}</div>
+                    <h4 className="text-sm font-semibold text-slate-900">Permissions for selected entities</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">Changes here apply to all {selectedEntityCount} selected {selectedEntityCount === 1 ? 'entity' : 'entities'}.</p>
+                    <div className="mt-4">{selectedAccessControls()}</div>
+                    {focusedEntity && selectedGrants.some((grant) => grant.client_id === focusedEntity.id && isScopedEntityGrant(grant.operation)) && <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-200 pt-4"><span className="min-w-0 truncate text-xs text-slate-600">Selected: {focusedEntity.name}</span><button type="button" onClick={() => removeEntity(focusedEntity.id)} className="shrink-0 text-xs font-medium text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline">Remove access</button></div>}
                   </div>
                 </div>}
-                {purpose === 'entities' && globalManageGrant && <div className="border-t border-slate-100 pt-4"><p className="text-sm font-semibold text-slate-900">Entity management</p><p className="mt-1 text-xs text-slate-600">Create anywhere · Edit/delete entities within this key's entity access.</p><div className="mt-2">{grantButton(globalManageGrant, 'Manage entities')}</div>{selectedKeys.has(grantKey(globalManageGrant)) && !selectedGrants.some((grant) => grant.operation === 'client.read') && <p role="note" className="mt-2 text-xs text-amber-800">Assign entity access to enable edit and delete.</p>}</div>}
-                {purpose === 'entities' && <div className="border-t border-slate-100 pt-4">
+                {purpose === 'entities' && <div>
                   <p className="text-sm font-semibold text-slate-900">Entity access</p>
                   <p className="mt-1 text-xs text-slate-600">Choose which entities this key may update or delete. Creating entities remains available anywhere.</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -689,22 +729,26 @@ export function MyApiKeysPage() {
                     <button type="button" aria-label="Selected entities" aria-pressed={scopeMode === 'selected'} onClick={() => { if (globalEntityReadGrant) setSelected((current) => current.filter((key) => key !== grantKey(globalEntityReadGrant))); setScopeMode('selected') }} className={`rounded-lg border px-4 py-3 text-left text-sm font-semibold ${scopeMode === 'selected' ? 'border-hq-teal bg-teal-50 text-hq-teal' : 'border-slate-200 text-slate-900 hover:bg-slate-50'}`}>Selected entities<span className="mt-0.5 block text-xs font-normal text-slate-600">Choose only the entities this key needs</span></button>
                   </div>
                   {scopeMode === 'selected' && <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex items-baseline justify-between gap-2"><p className="text-sm font-semibold text-slate-900">Entities</p><span className="text-xs text-slate-500">{selectedEntityReadCount} selected</span></div>
+                    <div className="flex items-baseline justify-between gap-2"><p className="text-sm font-semibold text-slate-900">Entities</p><span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-hq-teal">{selectedEntityReadCount} selected</span></div>
                     <label className="sr-only" htmlFor="entity-key-scope-search">Find an entity</label>
-                    <input id="entity-key-scope-search" type="search" value={entitySearch} onChange={(event) => setEntitySearch(event.target.value)} placeholder="Find an entity" className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-hq-teal focus:outline-none" />
+                    <input id="entity-key-scope-search" type="search" value={entitySearch} onChange={(event) => setEntitySearch(event.target.value)} placeholder="Search entities" className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-hq-teal focus:outline-none" />
                     <div role="group" aria-label="Entity access selection" className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-slate-200 pb-2 text-xs font-semibold">
                       <button type="button" disabled={!entityReadChoices.length || entityReadChoices.every(({ grant }) => selectedKeys.has(grantKey(grant)))} onClick={selectAllEntityReads} className="text-hq-teal hover:underline disabled:cursor-not-allowed disabled:opacity-50">{entitySearch.trim() ? `Select all ${entityReadChoices.length} matches` : `Select all ${entityReadChoices.length} entities`}</button>
                       <button type="button" disabled={!selectedEntityReadCount} onClick={clearEntityReads} className="text-slate-600 hover:text-slate-900 hover:underline disabled:cursor-not-allowed disabled:opacity-50">Clear selection</button>
+                      <button type="button" aria-pressed={showSelectedEntities} disabled={!selectedEntityReadCount && !showSelectedEntities} onClick={() => setShowSelectedEntities((current) => !current)} className={`ml-auto rounded-md px-2 py-1 disabled:opacity-40 ${showSelectedEntities ? 'bg-white text-hq-teal shadow-sm' : 'text-slate-600 hover:bg-white'}`}>{showSelectedEntities ? 'Show all' : 'Show selected'}</button>
                     </div>
-                    <div className="mt-2 max-h-56 space-y-1 overflow-y-auto pr-1">{entityReadChoices.slice(0, 50).map(({ client, grant }) => <button key={client.id} type="button" aria-label={`Select ${client.name}`} aria-pressed={selectedKeys.has(grantKey(grant))} onClick={() => toggleEntityRead(grant)} className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm ${selectedKeys.has(grantKey(grant)) ? 'border-hq-teal bg-teal-50 text-hq-teal' : 'border-transparent text-slate-900 hover:bg-white'}`}><span className="truncate font-medium">{client.name}</span><span className="shrink-0 text-xs">{selectedKeys.has(grantKey(grant)) ? 'Included' : 'Add'}</span></button>)}{!entityReadChoices.length && <p className="py-3 text-sm text-slate-500">No matching entities</p>}</div>
-                    {entityReadChoices.length > 50 && <p className="mt-2 text-xs text-slate-500">Showing 50 of {entityReadChoices.length}. Search to find another entity.</p>}
+                    <div className="mt-2 max-h-56 space-y-1 overflow-y-auto pr-1">{entityReadChoices.filter(({ grant }) => !showSelectedEntities || selectedKeys.has(grantKey(grant))).slice(0, 50).map(({ client, grant }) => <button key={client.id} type="button" aria-label={`Select ${client.name}`} aria-pressed={selectedKeys.has(grantKey(grant))} onClick={() => toggleEntityRead(grant)} className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-left text-sm ${selectedKeys.has(grantKey(grant)) ? 'border-hq-teal bg-teal-50 text-slate-950' : 'border-transparent text-slate-900 hover:bg-white'}`}><span className="min-w-0 truncate font-medium">{client.name}</span><span className="flex h-5 w-5 shrink-0 items-center justify-center">{selectedKeys.has(grantKey(grant)) && <Check aria-hidden="true" className="h-4 w-4 text-hq-teal" />}</span></button>)}{!entityReadChoices.length && <p className="py-3 text-sm text-slate-500">No matching entities</p>}</div>
+                    {entityReadChoices.length > 50 && !showSelectedEntities && <p className="mt-2 text-xs text-slate-500">Showing the first 50. Search to find another entity.</p>}
                   </div>}
                 </div>}
             </fieldset>
           </section>
           </>}
         </div>
-        <div data-dialog-footer className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" aria-label={keyStep === 'purpose' ? 'Reset API key setup' : 'Back to key type'} disabled={busy} onClick={keyStep === 'purpose' ? resetCreate : () => setKeyStep('purpose')} className="icon-first-action rounded-lg border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><RotateCw aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">{keyStep === 'purpose' ? 'Reset setup' : 'Back'}</span></button>{keyStep === 'purpose' ? <button type="button" aria-label="Continue to key details" disabled={!purpose} onClick={() => { setError(null); setKeyStep('setup') }} className="icon-first-action rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white disabled:opacity-50"><ChevronRight aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Continue</span></button> : <button type="submit" aria-label="Create key" disabled={busy || !canIssuePurpose || nameConflict} className="icon-first-action rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white transition-colors hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Plus aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">{busy ? 'Creating…' : 'Create key'}</span></button>}</div>
+        <div data-dialog-footer className="shrink-0 border-t border-slate-200 bg-slate-50 px-6 py-3">
+          {keyStep === 'setup' && <div aria-label="Key setup summary" className="mb-3 grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[1.3fr_1.2fr_1fr]"><p><span className="text-slate-500">Entities</span><span className="ml-2 font-semibold text-slate-800">{reviewScope}</span></p><p><span className="text-slate-500">Actions</span><span className="ml-2 font-semibold text-slate-800">{reviewActions}</span></p><p><span className="text-slate-500">Expires</span><span className="ml-2 font-semibold text-slate-800">{reviewExpiration}</span></p></div>}
+          <div className="flex items-center justify-between gap-3"><div>{keyStep === 'setup' ? <button type="button" aria-label="Back to key type" disabled={busy} onClick={() => setKeyStep('purpose')} className="icon-first-action rounded-lg border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><ChevronRight aria-hidden="true" className="h-4 w-4 rotate-180" /><span className="icon-first-label">Back to purpose</span></button> : hasSetupDraft && <button type="button" aria-label="Reset API key setup" disabled={busy} onClick={resetCreate} className="text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50">Reset setup</button>}</div>{keyStep === 'purpose' ? <button type="button" aria-label="Continue to key details" disabled={!purpose} onClick={() => { setError(null); setKeyStep('setup') }} className="icon-first-action rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white disabled:opacity-50"><ChevronRight aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Continue</span></button> : <button type="submit" aria-label="Create key" disabled={busy || !canIssuePurpose || nameConflict} className="icon-first-action rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white transition-colors hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Check aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">{busy ? 'Creating API key…' : 'Create API key'}</span></button>}</div>
+        </div>
       </form>}
     </dialog>
     <ConfirmDangerModal open={discardConfirmOpen} title="Discard this API key?" description="Your setup has not been saved." confirmLabel="Discard changes" cancelLabel="Keep editing" onCancel={() => setDiscardConfirmOpen(false)} onConfirm={() => { setDiscardConfirmOpen(false); setCreateOpen(false) }} />

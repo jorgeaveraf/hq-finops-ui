@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 
 export type ExpiryChoice = 'never' | '30' | '60' | '90' | 'custom'
 
@@ -47,11 +47,13 @@ export function KeyExpiryPicker({ choice, date, maximumDays, onChange }: {
   const nextMonth = new Date(month.getFullYear(), month.getMonth() + 1, 1)
   const earliestMonth = new Date(today.getFullYear(), today.getMonth(), 1)
   const latestMonth = new Date(maximum.getFullYear(), maximum.getMonth(), 1)
+  const expirySummary = choice === 'never' ? 'Active until revoked' : date
+    ? `Expires ${new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+    : 'Choose a date'
 
   return <fieldset className="text-sm">
-    <legend className="font-medium text-slate-900">Expiration</legend>
-    <p className="mt-0.5 text-xs text-slate-600">Optional · up to {maximumDays} days</p>
-    <div ref={calendarRef} className="mt-3"><div className="flex flex-wrap gap-2">{options.map((option) => <button key={option.value} type="button" aria-pressed={choice === option.value} aria-expanded={option.value === 'custom' ? calendarOpen : undefined} onClick={() => { if (option.value === 'custom') setCalendarOpen((open) => !open); else { setCalendarOpen(false); onChange(option.value, option.value === 'never' ? '' : daysFromToday(Number(option.value))) } }} className={`rounded-lg border px-3 py-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal ${choice === option.value ? 'border-hq-teal bg-teal-50 font-semibold text-hq-teal' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'}`}>{option.label}</button>)}</div>{calendarOpen && <div className="mt-3 w-full max-w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-sm" aria-label="Choose expiration date">
+    <legend className="mb-2 font-semibold text-slate-950">Expiration</legend>
+    <div ref={calendarRef}><div className="flex flex-wrap gap-2">{options.map((option) => <button key={option.value} type="button" aria-pressed={choice === option.value} aria-expanded={option.value === 'custom' ? calendarOpen : undefined} onClick={() => { if (option.value === 'custom') setCalendarOpen((open) => !open); else { setCalendarOpen(false); onChange(option.value, option.value === 'never' ? '' : daysFromToday(Number(option.value))) } }} className={`inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal ${choice === option.value ? 'border-hq-teal bg-teal-50 font-semibold text-hq-teal' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'}`}>{option.value === 'custom' && <CalendarDays aria-hidden="true" className="h-4 w-4" />}{option.label}</button>)}</div><p className="mt-2 text-xs text-slate-600" aria-live="polite">{expirySummary}<span className="mx-1.5 text-slate-300" aria-hidden="true">·</span>Dated keys: up to {maximumDays} days.</p>{calendarOpen && <div className="mt-3 w-full max-w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-sm" aria-label="Choose expiration date">
       <div className="mb-3 flex items-center justify-between gap-2">
         <button type="button" aria-label="Previous month" disabled={previousMonth < earliestMonth} onClick={() => setMonth(previousMonth)} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-30"><ChevronLeft aria-hidden="true" size={16} /></button>
         <span className="font-semibold text-slate-900">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>

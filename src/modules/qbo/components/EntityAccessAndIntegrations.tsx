@@ -18,12 +18,13 @@ type Response = { can_view_others: boolean; items: Integration[] }
 const accessLabels = (grants: Integration['access']) => {
   const operations = new Set(grants.map((grant) => grant.operation))
   const labels: string[] = []
-  if (operations.has('qbo.entity.read')) labels.push(operations.has('qbo.entity.edit') ? 'Read and Edit QBO' : 'Read QBO')
+  if (operations.has('qbo.entity.read')) labels.push(operations.has('qbo.entity.edit') ? 'Read · Edit' : 'Read')
   else {
-    if (operations.has('client.read')) labels.push(grants.some((grant) => grant.operation.startsWith('qbo.') && grant.operation !== 'qbo.entity.edit') ? 'Entity details' : 'Entity details only (no QBO data)')
-    if (operations.has('qbo.entity.edit')) labels.push('Edit QBO (legacy; no Read QBO)')
+    if (operations.has('client.read')) labels.push(grants.some((grant) => grant.operation.startsWith('qbo.') && grant.operation !== 'qbo.entity.edit') ? 'Entity details' : 'Entity details only')
+    if (operations.has('qbo.entity.edit')) labels.push('Edit (legacy; no Read)')
   }
-  for (const grant of grants.filter((grant) => !['client.read', 'qbo.entity.read', 'qbo.entity.edit'].includes(grant.operation))) {
+  if (operations.has('qbo.entity.delete')) labels.push('Delete')
+  for (const grant of grants.filter((grant) => !['client.read', 'qbo.entity.read', 'qbo.entity.edit', 'qbo.entity.delete'].includes(grant.operation))) {
     labels.push(`${permissionName(grant.operation)}${grant.environment ? ` · ${grant.environment === 'prod' ? 'Production' : 'Sandbox'}` : ''}`)
   }
   return [...new Set(labels)]

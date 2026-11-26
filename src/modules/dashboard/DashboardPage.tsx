@@ -4,7 +4,6 @@ import { Activity, AlertCircle, ArrowUpRight, Building2, CheckCircle2, UserRound
 import { apiRequest } from '../../api/finopsApi'
 import { Alert } from '../../components/Alert'
 import { Card } from '../../components/Card'
-import { InfoTooltip } from '../../components/InfoTooltip'
 import { useAuth } from '../auth/useAuth'
 
 type Overview = {
@@ -77,13 +76,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <header className="py-1">
-        <div className="flex items-center gap-1"><h1 className="text-2xl font-bold leading-none text-slate-900 md:text-3xl">FinOps Console</h1>
-        <InfoTooltip
-          label="About FinOps Console"
-          text="A high-level view of your financial operations, including clients, integrations, and items from the QBO Gateway"
-          align="left"
-        />
-        </div>
+        <h1 className="text-2xl font-bold leading-none text-slate-900 md:text-3xl">FinOps Console</h1>
         <p className="mt-1 text-sm font-medium text-slate-600">QBO Gateway</p>
       </header>
 
@@ -92,10 +85,8 @@ export function DashboardPage() {
           <p className="text-sm text-slate-600">Ask an administrator to assign access to an entity.</p>
         </Card>
       ) : (
-        <Card
-          title="Clients & Integrations"
-          titleSuffix={<InfoTooltip label="About connection results" text="QuickBooks connection status for entities you can access." />}
-        >
+        <section aria-label="Clients & Integrations" className="space-y-3">
+          <h2 className="text-lg font-semibold text-slate-900">Clients & Integrations</h2>
           {error && <Alert title="Overview unavailable" description={error} variant="error" />}
           {!error && !overview && <p className="text-sm text-slate-600" role="status">Loading saved connection status...</p>}
           {overview && (
@@ -143,12 +134,12 @@ export function DashboardPage() {
               {overview.activeClients === 0 && <p className="text-sm text-slate-600">No active entities are available in this environment.</p>}
             </div>
           )}
-        </Card>
+        </section>
       )}
       {(canViewActivity || canManagePeople) && <section aria-label="Administration overview" className="space-y-3">
         <h2 className="text-lg font-semibold text-slate-900">Operations & administration</h2>
         <div className="grid gap-3 md:grid-cols-2">
-          {canViewActivity && <Link to="/access/activity" className="group flex min-w-0 items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-hq-teal/50 hover:bg-teal-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal"><div className="min-w-0"><div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Activity aria-hidden="true" className="h-4 w-4 text-slate-600" />QBO transactions</div>{activitySnapshot ? <><p className="mt-3 text-xl font-semibold tabular-nums text-slate-900">{activitySnapshot.total === null ? 'Recent QBO transactions' : activitySnapshot.total === 1 ? '1 QBO transaction' : `${activitySnapshot.total} QBO transactions`}</p>{activitySnapshot.latest ? <><p className="mt-2 truncate text-sm font-medium text-slate-800">Latest: {activitySnapshot.latest.action}</p><p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500"><UserRound aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />{activitySnapshot.latest.actor_name || activitySnapshot.latest.actor}</p></> : <p className="mt-2 text-sm text-slate-600">No QBO transactions in the last 15 days.</p>}</> : <p className="mt-3 text-sm text-slate-600">{activityError ? 'Activity summary unavailable.' : 'Loading activity…'}</p>}</div></Link>}
+          {canViewActivity && <Link to="/access/activity" className="group min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-hq-teal/50 hover:bg-teal-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal"><div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Activity aria-hidden="true" className="h-4 w-4 text-slate-600" />QBO transactions</div>{activitySnapshot ? <><p className="mt-3 text-xl font-semibold tabular-nums text-slate-900">{activitySnapshot.total === null ? 'Recent QBO transactions' : activitySnapshot.total === 1 ? '1 QBO transaction' : `${activitySnapshot.total} QBO transactions`}</p>{activitySnapshot.latest ? <p className="mt-2 min-w-0 text-sm font-medium text-slate-800">Latest: {activitySnapshot.latest.action} <span className="inline-flex items-center gap-1 whitespace-nowrap text-slate-500">by <UserRound aria-hidden="true" className="h-3.5 w-3.5" />{activitySnapshot.latest.actor_name || activitySnapshot.latest.actor}</span></p> : <p className="mt-2 text-sm text-slate-600">No QBO transactions in the last 15 days.</p>}</> : <p className="mt-3 text-sm text-slate-600">{activityError ? 'Activity summary unavailable.' : 'Loading activity…'}</p>}</Link>}
           {canManagePeople && <Link to="/access/users" className="group flex min-w-0 items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-hq-teal/50 hover:bg-teal-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal"><div className="min-w-0"><div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Users aria-hidden="true" className="h-4 w-4 text-slate-600" />People and access</div>{peopleSnapshot ? <><p className="mt-3 text-xl font-semibold tabular-nums text-slate-900">{peopleSnapshot.total} {peopleSnapshot.total === 1 ? 'person' : 'people'} managed</p><p className="mt-2 text-sm text-slate-700">{peopleSnapshot.awaiting} awaiting first sign-in · {peopleSnapshot.paused} paused</p></> : <p className="mt-3 text-sm text-slate-600">{peopleError ? 'People summary unavailable.' : 'Loading people…'}</p>}</div></Link>}
         </div>
       </section>}

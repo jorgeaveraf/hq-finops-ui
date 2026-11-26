@@ -23,6 +23,7 @@ export function ActivityDateFilter({ from, to, onChange }: { from: string; to: s
     return () => { element?.close(); previous?.focus() }
   }, [open])
   const choose = (value: string) => {
+    if (value === '') { onChange('', ''); return }
     if (value === 'custom') {
       setStart(from); setEnd(to)
       const initial = from ? new Date(`${from}T12:00:00`) : new Date()
@@ -37,7 +38,7 @@ export function ActivityDateFilter({ from, to, onChange }: { from: string; to: s
   return <>
     <FilterDropdown label="When" placeholder="Any time" value={from ? 'custom' : ''}
       selectedLabelOverride={from ? `${displayDate(from)} – ${displayDate(to)}` : undefined}
-      options={[{ value: '1', label: 'Today' }, { value: '7', label: 'Last 7 days' }, { value: '15', label: 'Last 15 days' }]}
+      options={[{ value: '', label: 'Any time' }, { value: '1', label: 'Today' }, { value: '7', label: 'Last 7 days' }, { value: '15', label: 'Last 15 days' }]}
       footerOption={{ value: 'custom', label: 'Choose dates…' }} onChange={choose} />
     {open && <dialog ref={dialog} aria-labelledby="activity-dates-title" onCancel={() => setOpen(false)} className="w-[min(25rem,calc(100%-2rem))] rounded-2xl border border-slate-200 p-5 shadow-xl backdrop:bg-slate-950/40">
       <h2 id="activity-dates-title" className="text-lg font-semibold">Choose a date range</h2>

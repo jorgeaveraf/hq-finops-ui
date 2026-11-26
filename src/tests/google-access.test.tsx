@@ -149,7 +149,8 @@ describe('Google governed access', () => {
     expect(within(overview).getByRole('link', { name: /QBO transactions/ })).toHaveAttribute('href', '/access/activity')
     expect(within(overview).getByRole('link', { name: /People and access/ })).toHaveAttribute('href', '/access/users')
     expect(await within(overview).findByText('1 QBO transaction')).toBeInTheDocument()
-    expect(within(overview).getByText(/Latest: Viewed QuickBooks data/)).toBeInTheDocument()
+    const transactionCard = within(overview).getByRole('link', { name: /QBO transactions/ })
+    expect(transactionCard).toHaveTextContent('Latest: Viewed QuickBooks data for Allowed entity by owner@example.test')
     expect(await within(overview).findByText('2 people managed')).toBeInTheDocument()
     expect(within(overview).getByText('1 awaiting first sign-in · 1 paused')).toBeInTheDocument()
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' })
@@ -180,23 +181,28 @@ describe('Google governed access', () => {
     await act(async () => render(<MemoryRouter initialEntries={['/access']}><AuthProvider><Routes><Route path="/access" element={<AccessHomePage />} /></Routes></AuthProvider></MemoryRouter>))
     const entityAccess = screen.getByRole('region', { name: 'Entity access' })
     expect(await within(entityAccess).findByText('13 current')).toBeInTheDocument()
-    expect(within(entityAccess).getAllByText('Read QBO').length).toBeGreaterThan(0)
-    expect(within(entityAccess).getAllByText('Edit QBO', { exact: false }).length).toBeGreaterThan(0)
+    expect(within(entityAccess).getAllByText('Read').length).toBeGreaterThan(0)
+    expect(within(entityAccess).getAllByText('Edit', { exact: false }).length).toBeGreaterThan(0)
     expect(within(entityAccess).queryByText('Manage entities')).not.toBeInTheDocument()
     const consoleAccess = screen.getByRole('region', { name: 'Administration access' })
     expect(within(consoleAccess).getAllByText('Manage entities')).toHaveLength(1)
-    expect(consoleAccess).toHaveTextContent('Create anywhere · Edit/delete: all assigned entities')
+    expect(within(consoleAccess).getByRole('link', { name: 'Manage entities' })).toHaveAttribute('href', '/qbo/clients')
+    expect(consoleAccess).not.toHaveTextContent('Create anywhere · Edit/delete: all assigned entities')
+    expect(entityAccess.parentElement).toHaveClass('items-stretch')
     fireEvent.click(within(entityAccess).getByText('Entities and effective access'))
+    await waitFor(() => expect(entityAccess.parentElement).toHaveClass('items-start'))
     const effectiveList = within(entityAccess).getByRole('list', { name: 'Effective entity access' })
     expect(within(effectiveList).getAllByRole('listitem')).toHaveLength(13)
     expect(within(effectiveList).getByText('Demo · Entity 12')).toBeInTheDocument()
-    expect(within(effectiveList).getByText('ACME Sandbox').closest('li')).toHaveTextContent('Read QBO')
-    expect(within(effectiveList).getByText('ACME Sandbox').closest('li')).toHaveTextContent('Edit QBO')
+    expect(within(effectiveList).getByText('ACME Sandbox').closest('li')).toHaveTextContent('Read')
+    expect(within(effectiveList).getByText('ACME Sandbox').closest('li')).toHaveTextContent('Edit')
     fireEvent.change(within(entityAccess).getByRole('searchbox', { name: 'Filter entities' }), { target: { value: 'Entity 12' } })
     expect(within(effectiveList).getAllByRole('listitem')).toHaveLength(1)
     expect(within(entityAccess).getAllByText('ACME Sandbox')).toHaveLength(1)
     expect(within(entityAccess).getByText('Demo · Entity 12')).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'QuickBooks connections' })).not.toBeInTheDocument()
+    fireEvent.click(within(entityAccess).getByText('Entities and effective access'))
+    await waitFor(() => expect(entityAccess.parentElement).toHaveClass('items-stretch'))
   })
 
   it('navigates between account tabs while an expanded sidebar closes', async () => {
@@ -271,8 +277,10 @@ describe('Google governed access', () => {
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'All activity' })))
     expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('scope=completed'), expect.anything())
     fireEvent.click(screen.getByRole('button', { name: /^Person / }))
-    expect(screen.queryByRole('option', { name: 'Anyone' })).not.toBeInTheDocument()
-    await act(async () => fireEvent.click(screen.getByRole('option', { name: 'owner@example.test' })))
+    expect(screen.getByRole('button', { name: 'Everyone' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Unidentified' })).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search by email' }), { target: { value: 'owner' } })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'owner@example.test' })))
     expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('scope=completed&page=1&actor_email=owner%40example.test'), expect.anything())
     fireEvent.click(screen.getByRole('button', { name: /^When / }))
     await act(async () => fireEvent.click(screen.getByRole('option', { name: 'Last 7 days' })))
@@ -282,6 +290,14 @@ describe('Google governed access', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Operation / }))
     await act(async () => fireEvent.click(screen.getByRole('option', { name: 'Deleted' })))
     expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('category=delete'), expect.anything())
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Clear operation' })))
+    expect(vi.mocked(globalThis.fetch).mock.calls.at(-1)?.[0]).not.toContain('category=')
+    fireEvent.click(screen.getByRole('button', { name: /^Person / }))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Unidentified' })))
+    expect(vi.mocked(globalThis.fetch).mock.calls.at(-1)?.[0]).toContain('actor_email=Unidentified+actor')
+    fireEvent.click(screen.getByRole('button', { name: /^Person / }))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Everyone' })))
+    expect(vi.mocked(globalThis.fetch).mock.calls.at(-1)?.[0]).not.toContain('actor_email=')
   }, 15000)
 
   it('does not request Activity for a Google user without activity.read', async () => {
@@ -358,9 +374,25 @@ describe('Google governed access', () => {
       <Route element={<RequireClientRead />}><Route path="/qbo/clients" element={<ClientListPage readOnly />} /></Route>
     </Routes></AuthProvider></MemoryRouter>))
     expect(await screen.findByRole('heading', { name: 'Account access' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Administration access' })).toHaveTextContent('Manage access')
+    expect(screen.getByRole('region', { name: 'Administration access' })).toHaveTextContent('Manage people')
     expect(screen.queryByText('access.manage')).not.toBeInTheDocument()
     expect(globalThis.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/clients'), expect.anything())
+  })
+
+  it('links each Admin access item to its destination', async () => {
+    mockGoogleSession([
+      { operation: 'access.manage', client_id: null, environment: null },
+      { operation: 'activity.read', client_id: null, environment: null },
+      { operation: 'entities.manage', client_id: null, environment: null },
+      { operation: 'keys.admin', client_id: null, environment: null },
+    ])
+    await act(async () => render(<MemoryRouter initialEntries={['/access']}><AuthProvider><Routes><Route path="/access" element={<AccessHomePage />} /></Routes></AuthProvider></MemoryRouter>))
+    const adminAccess = screen.getByRole('region', { name: 'Administration access' })
+    expect(within(adminAccess).getByRole('link', { name: 'Manage people' })).toHaveAttribute('href', '/access/users')
+    expect(within(adminAccess).getByRole('link', { name: 'View activity history' })).toHaveAttribute('href', '/access/activity')
+    expect(within(adminAccess).getByRole('link', { name: 'Manage entities' })).toHaveAttribute('href', '/qbo/clients')
+    expect(within(adminAccess).getByRole('link', { name: 'Manage entities' }).querySelector('svg')).toHaveClass('opacity-0', 'group-hover:opacity-100', 'group-focus-visible:opacity-100')
+    expect(within(adminAccess).queryByRole('link', { name: 'Administer API keys' })).not.toBeInTheDocument()
   })
 
   it('lets an Admin configure a person before creating the account and grants together', async () => {
@@ -372,6 +404,7 @@ describe('Google governed access', () => {
       { id: 'client-grant', operation: 'client.read', client_id: null, environment: null },
       { id: 'qbo-read-grant', operation: 'qbo.entity.read', client_id: null, environment: null },
       { id: 'qbo-edit-grant', operation: 'qbo.entity.edit', client_id: null, environment: null },
+      { id: 'qbo-delete-grant', operation: 'qbo.entity.delete', client_id: null, environment: null },
     ])
     const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
     let approved = false
@@ -411,21 +444,41 @@ describe('Google governed access', () => {
     expect(accessStep).toBeEnabled()
     expect(accessStep).not.toHaveAttribute('aria-current')
     expect(within(addDialog).getByRole('button', { name: /^Viewer/ })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Continue to access' }))
+    fireEvent.click(await within(addDialog).findByRole('button', { name: /All available entities/ }))
+    expect(within(addDialog).getByRole('button', { name: 'Read QuickBooks data for entity' })).toBeDisabled()
+    expect(within(addDialog).queryByRole('button', { name: 'Edit QuickBooks data for entity' })).not.toBeInTheDocument()
+    expect(within(addDialog).queryByRole('button', { name: 'Delete QuickBooks data for entity' })).not.toBeInTheDocument()
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Back' }))
     fireEvent.click(within(addDialog).getByRole('button', { name: /^Admin/ }))
+    expect(within(addDialog).getByText('Can view and edit QuickBooks data for assigned entities and manage selected FinOps features.')).toBeInTheDocument()
     expect(within(addDialog).queryByText(/Manage entities also allows this person/)).not.toBeInTheDocument()
     fireEvent.click(within(addDialog).getByRole('button', { name: 'Continue to access' }))
-    await within(addDialog).findByRole('button', { name: /All entities/ })
-    fireEvent.click(within(addDialog).getByRole('button', { name: /All entities/ }))
+    await within(addDialog).findByRole('button', { name: /All available entities/ })
+    fireEvent.click(within(addDialog).getByRole('button', { name: /All available entities/ }))
     const administration = within(addDialog).getByRole('group', { name: 'Console administration' })
-    expect(within(administration).getByRole('button', { name: 'Manage access' })).toHaveAttribute('aria-pressed', 'false')
+    expect(within(addDialog).getByRole('region', { name: 'Entities and permissions' })).toContainElement(within(addDialog).getByRole('group', { name: 'Entity and QuickBooks access' }))
+    expect(within(addDialog).getByRole('region', { name: 'Entities and permissions' })).not.toContainElement(administration)
+    expect(within(administration).queryByText('Selected admin permissions')).not.toBeInTheDocument()
+    expect(within(administration).getByRole('button', { name: 'Manage people' })).toHaveAttribute('aria-pressed', 'false')
     expect(within(administration).queryByRole('button', { name: 'Manage entities in FinOps' })).not.toBeInTheDocument()
     expect(within(addDialog).queryByRole('group', { name: 'Entity management' })).not.toBeInTheDocument()
     expect(within(administration).getByRole('button', { name: 'View activity history' })).toHaveAttribute('aria-pressed', 'false')
-    expect(within(administration).getByRole('button', { name: 'Administer API keys' })).toHaveAttribute('aria-pressed', 'false')
+    expect(within(administration).queryByRole('button', { name: 'Administer API keys' })).not.toBeInTheDocument()
+    fireEvent.click(within(administration).getByRole('button', { name: 'View activity history' }))
+    expect(within(administration).getByText('View activity history and event details.')).toBeInTheDocument()
+    fireEvent.click(within(administration).getByRole('button', { name: 'View activity history' }))
+    expect(within(administration).queryByText('Selected admin permissions')).not.toBeInTheDocument()
     expect(within(addDialog).queryByRole('button', { name: 'View entity in FinOps' })).not.toBeInTheDocument()
-    expect(within(addDialog).queryByRole('button', { name: 'Read QuickBooks data for entity' })).not.toBeInTheDocument()
-    expect(within(addDialog).getByRole('group', { name: 'Entity and QuickBooks access' })).toHaveTextContent('Read QBO is preselected')
+    expect(within(addDialog).getByRole('button', { name: 'Read QuickBooks data for entity' })).toBeDisabled()
+    expect(within(addDialog).getByRole('group', { name: 'Entity and QuickBooks access' })).toHaveTextContent('Read')
     expect(within(addDialog).getByRole('button', { name: 'Edit QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(addDialog).getByRole('button', { name: 'Edit QuickBooks data for entity' })).toBeDisabled()
+    expect(within(addDialog).getByRole('button', { name: 'Delete QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Delete QuickBooks data for entity' }))
+    expect(within(addDialog).getByRole('button', { name: 'Delete QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Delete QuickBooks data for entity' }))
+    expect(within(addDialog).getByRole('button', { name: 'Delete QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'false')
     expect(within(administration).queryByRole('checkbox')).not.toBeInTheDocument()
     fireEvent.click(within(addDialog).getByRole('button', { name: 'Back' }))
     fireEvent.click(within(addDialog).getByRole('button', { name: /^Operator/ }))
@@ -452,7 +505,9 @@ describe('Google governed access', () => {
     expect(within(addDialog).queryByRole('group', { name: 'Console administration' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'View entity in FinOps' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByText('2 entities selected')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit QuickBooks data for entity' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Delete QuickBooks data for entity' })).not.toBeInTheDocument()
+    expect(screen.getByText('2 current entities selected')).toBeInTheDocument()
     fireEvent.click(within(addDialog).getByRole('button', { name: 'Back' }))
     fireEvent.change(screen.getByPlaceholderText('name@company.com'), { target: { value: 'invalid' } })
     expect(within(addDialog).getByRole('button', { name: '2 · Access' })).toBeDisabled()
@@ -501,75 +556,38 @@ describe('Google governed access', () => {
     expect(globalThis.fetch).not.toHaveBeenCalledWith('/automations/api/access/users', expect.objectContaining({ method: 'POST' }))
   })
 
-  it('summarizes edit impact by entity and returns to the existing editor', async () => {
+  it('uses existing grants as an editable draft before review', async () => {
     mockGoogleSession([
       { id: 'users-grant', operation: 'access.manage', client_id: null, environment: null },
-      { id: 'qbo-edit-grant', operation: 'qbo.entity.edit', client_id: null, environment: null },
-      { id: 'client-grant', operation: 'client.read', client_id: null, environment: null },
+      { id: 'read-grant', operation: 'qbo.entity.read', client_id: null, environment: null },
+      { id: 'edit-grant', operation: 'qbo.entity.edit', client_id: null, environment: null },
     ])
     const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
     vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
       const path = String(input)
-      if (path.endsWith('/access/users')) return new Response(JSON.stringify([{ id: 'user-2', email: 'ana@example.test', display_name: 'Ana', role: 'Operator', status: 'active', issuer: null, sub: null }]), { status: 200 })
-      if (path.endsWith('/access/grants?user_id=user-2')) return new Response(JSON.stringify([{ operation: 'client.read', client_id: 'client-1', environment: null }]), { status: 200 })
-      if (path.endsWith('/access/users/user-2/policy/preview') && init?.method === 'POST') return new Response(JSON.stringify({ fingerprint: 'fingerprint-1', affected_keys: [], suspended_keys: [], changes: ['Add 1 permission(s)'] }), { status: 200 })
-      if (path.endsWith('/clients')) return new Response(JSON.stringify([{ id: 'client-1', name: 'ACME Sandbox' }, ...Array.from({ length: 11 }, (_, index) => ({ id: `demo-${index}`, name: `Demo entity ${index + 1}` }))]), { status: 200 })
+      if (path.endsWith('/access/users')) return Response.json([{ id: 'user-2', email: 'ana@example.test', display_name: 'Ana', role: 'Operator', status: 'active', issuer: null, sub: null }])
+      if (path.endsWith('/access/grants?user_id=user-2')) return Response.json([{ operation: 'qbo.entity.read', client_id: 'client-1', environment: null }])
+      if (path.endsWith('/clients')) return Response.json([{ id: 'client-1', name: 'ACME Sandbox' }, { id: 'client-2', name: 'Demo entity' }])
+      if (path.endsWith('/access/users/user-2/policy/preview') && init?.method === 'POST') return Response.json({ fingerprint: 'fingerprint-1', affected_keys: [], suspended_keys: [] })
       return baseFetch(input, init)
     })
     await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
     fireEvent.click(await screen.findByRole('link', { name: 'Change access for Ana' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Actions & entities' }))
-    expect(screen.getByRole('note')).toHaveTextContent('Only access you can manage is shown here')
-    expect(screen.getByRole('region', { name: 'Entity access editor' })).toHaveTextContent('1 selected')
-    expect(screen.getByRole('region', { name: 'Assigned entity access' })).toHaveTextContent('Coverage')
-    expect(screen.getByRole('region', { name: 'Assigned entity access' })).toHaveTextContent('ACME Sandbox')
-    expect(screen.queryByRole('searchbox', { name: 'Find an entity' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit access for ACME Sandbox' })).toHaveAttribute('aria-pressed', 'true')
-    fireEvent.click(screen.getByRole('button', { name: 'Add entity access' }))
-    expect(screen.queryByRole('region', { name: 'Editing selected scope' })).not.toBeInTheDocument()
-    expect(screen.getByText('Select entities to add')).toBeInTheDocument()
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Find an entity' }), { target: { value: 'Demo entity 1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Select Demo entity 11' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Select Demo entity 10' }))
-    expect(screen.getByRole('button', { name: 'Select Demo entity 11' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByText('2 entities selected')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Add selected' }))
-    expect(screen.getByRole('button', { name: 'Edit access for Demo entity 11' })).toHaveTextContent('Edit')
-    expect(screen.getByRole('button', { name: 'Edit access for Demo entity 10' })).toHaveTextContent('Edit')
-    expect(screen.getByRole('button', { name: 'Edit QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'true')
-    fireEvent.click(screen.getByRole('button', { name: 'Edit access for ACME Sandbox' }))
-    expect(screen.getByRole('button', { name: 'Edit access for Demo entity 11' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Add entity access' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add access for All entities' }))
-    expect(screen.getByRole('region', { name: 'Editing selected scope' })).toHaveTextContent('Entity and QuickBooks access only')
-    expect(screen.getByRole('region', { name: 'Editing selected scope' })).not.toHaveTextContent('follows this entity access')
-    expect(screen.queryByRole('button', { name: 'Edit access for Demo entity 11' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit access for Demo entity 10' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Use selected entities instead' }))
-    expect(screen.getByRole('searchbox', { name: 'Find an entity' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Back to access' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Edit access for ACME Sandbox' }))
-    expect(screen.getByRole('button', { name: 'Edit QuickBooks data for entity' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Edit QuickBooks data for entity' })).toHaveTextContent('From all entities')
+    const draft = screen.getByRole('region', { name: 'Entity access editor' })
+    expect(within(draft).getByRole('region', { name: 'Access for ACME Sandbox' })).toHaveTextContent('Read')
+    expect(within(draft).getByRole('region', { name: 'Access for Demo entity' })).toHaveTextContent('No access')
+    fireEvent.click(within(draft).getByRole('button', { name: 'Add access for Demo entity' }))
+    expect(within(draft).getByRole('region', { name: 'Access for Demo entity' })).toHaveTextContent('Edit')
     fireEvent.click(screen.getByRole('button', { name: 'Review changes' }))
-    const review = await screen.findByRole('region', { name: 'Policy impact preview' })
-    expect(review).toHaveTextContent('Ana')
-    expect(review).toHaveTextContent('Operator')
-    expect(review).toHaveTextContent('Allowed')
-    expect(review).toHaveTextContent('All entities')
-    expect(review).toHaveTextContent('+ Edit')
-    expect(review).toHaveTextContent('No impact')
-    const previewRequest = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input).endsWith('/access/users/user-2/policy/preview'))
-    const previewBody = JSON.parse(String(previewRequest?.[1]?.body)) as { grants: { operation: string; client_id: string | null }[] }
-    expect(previewBody.grants.filter((grant) => grant.client_id === 'client-1').map((grant) => grant.operation)).toEqual(['client.read'])
-    expect(previewBody.grants.filter((grant) => grant.client_id === null).map((grant) => grant.operation)).toEqual(['qbo.entity.edit'])
-    expect(review).not.toHaveTextContent('Nothing has been saved yet')
+    expect(await screen.findByRole('region', { name: 'Policy impact preview' })).toHaveTextContent('Demo entity')
     fireEvent.click(screen.getByRole('button', { name: 'Back to editing' }))
-    expect(screen.getByRole('button', { name: 'Actions & entities' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Edit QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('region', { name: 'Access for Demo entity' })).toHaveTextContent('Read')
+    fireEvent.click(screen.getByRole('button', { name: 'Reset actions and entities' }))
+    expect(screen.getByRole('button', { name: 'Add access for Demo entity' })).toBeInTheDocument()
   }, 15000)
 
-  it('reconciles a role downgrade in the shared draft without visiting the access tab', async () => {
+  it('requires reviewing entity scope before previewing a role downgrade', async () => {
     mockGoogleSession([{ id: 'users-grant', operation: 'access.manage', client_id: null, environment: null }, { id: 'entities-grant', operation: 'entities.manage', client_id: null, environment: null }, { id: 'qbo-edit-grant', operation: 'qbo.entity.edit', client_id: null, environment: null }])
     const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
     vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
@@ -592,16 +610,18 @@ describe('Google governed access', () => {
     fireEvent.click(within(screen.getByRole('group', { name: /^Role$/ })).getByRole('button', { name: /Operator/ }))
     expect(screen.getByText(/Can view assigned entities and connect them to QuickBooks/)).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Admin → Operator')
-    expect(screen.getByRole('button', { name: 'Review changes' })).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Actions & entities' }))
+    expect(screen.queryByRole('button', { name: 'Review changes' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to actions and entities' }))
+    expect(screen.getByRole('button', { name: 'Actions & entities' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('region', { name: 'Entity access editor' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'View entity in FinOps' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Manage access' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Edit access for ACME Sandbox' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('region', { name: 'Admin access' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Review changes' }))
     const review = await screen.findByRole('region', { name: 'Policy impact preview' })
     expect(review).toHaveTextContent('Admin → Operator')
     expect(review).toHaveTextContent('− Manage entities · Role limit')
-    expect(review).toHaveTextContent('− Manage access · Role limit')
+    expect(review).toHaveTextContent('− Manage people · Role limit')
     expect(review).not.toHaveTextContent('− Edit')
     expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('/access/users/user-2/policy/preview'), expect.objectContaining({ body: JSON.stringify({ role: 'Operator', status: 'active', grants: [
       { operation: 'client.read', client_id: 'client-1', environment: null },
@@ -613,7 +633,7 @@ describe('Google governed access', () => {
     expect(screen.getByRole('button', { name: 'Review changes' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Actions & entities' }))
     expect(screen.getByRole('button', { name: 'Manage entities in FinOps' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Manage access' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Manage people' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('preselects entity Edit when upgrading a Viewer to Operator', async () => {
@@ -634,7 +654,7 @@ describe('Google governed access', () => {
     expect(await screen.findByRole('button', { name: 'Review changes' })).toBeDisabled()
     fireEvent.click(within(screen.getByRole('group', { name: /^Role$/ })).getByRole('button', { name: /Operator/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Actions & entities' }))
-    expect(screen.getByRole('button', { name: 'Edit QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getAllByRole('button', { name: /^Edit access for / })[0]).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'Review changes' }))
     await screen.findByRole('region', { name: 'Policy impact preview' })
     expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('/access/users/user-2/policy/preview'), expect.objectContaining({ body: JSON.stringify({
@@ -646,51 +666,11 @@ describe('Google governed access', () => {
     }) }))
   })
 
-  it('limits suggested global Edit to selected entities while keeping global Read', async () => {
+  it('keeps entity access scoped to current IDs when changing a role', async () => {
     mockGoogleSession([
       { id: 'users-grant', operation: 'access.manage', client_id: null, environment: null },
       { id: 'read-grant', operation: 'qbo.entity.read', client_id: null, environment: null },
       { id: 'edit-grant', operation: 'qbo.entity.edit', client_id: null, environment: null },
-    ])
-    const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
-    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
-      const path = String(input)
-      if (path.endsWith('/access/users')) return Response.json([{ id: 'user-2', email: 'ana@example.test', display_name: 'Ana', role: 'Viewer', status: 'active', issuer: null, sub: null }])
-      if (path.endsWith('/access/grants?user_id=user-2')) return Response.json([{ operation: 'qbo.entity.read', client_id: null, environment: null }])
-      if (path.endsWith('/clients')) return Response.json([{ id: 'client-1', name: 'First entity' }, { id: 'client-2', name: 'Second entity' }])
-      if (path.endsWith('/access/users/user-2/policy/preview') && init?.method === 'POST') return Response.json({ fingerprint: 'fingerprint-1', affected_keys: [], suspended_keys: [] })
-      return baseFetch(input, init)
-    })
-    await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
-    fireEvent.click(await screen.findByRole('link', { name: 'Change access for Ana' }))
-    await screen.findByRole('button', { name: 'Review changes' })
-    fireEvent.click(within(screen.getByRole('group', { name: /^Role$/ })).getByRole('button', { name: /Operator/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Actions & entities' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Limit Edit to selected entities' }))
-    expect(screen.getByRole('button', { name: 'Select First entity' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Select Second entity' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Select First entity' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Apply Edit scope' }))
-    expect(screen.getByRole('region', { name: 'Entity access editor' })).toHaveTextContent('All current and future entities · 1 with additional access')
-    expect(screen.getByRole('button', { name: 'Edit access for First entity' })).toHaveTextContent('Additional access: Edit')
-    fireEvent.click(screen.getByRole('button', { name: 'Add Edit to selected entities' }))
-    expect(screen.queryByRole('button', { name: 'Select First entity' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Select Second entity' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Back to access' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Review changes' }))
-    await screen.findByRole('region', { name: 'Policy impact preview' })
-    const call = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input).endsWith('/access/users/user-2/policy/preview'))
-    const body = JSON.parse(String(call?.[1]?.body)) as { grants: { operation: string; client_id: string | null; environment: string | null }[] }
-    expect(body.grants).toEqual([
-      { operation: 'qbo.entity.read', client_id: null, environment: null },
-      { operation: 'qbo.entity.edit', client_id: 'client-1', environment: null },
-    ])
-  })
-
-  it('shows individual Read grants moving to All entities as one scope change', async () => {
-    mockGoogleSession([
-      { operation: 'access.manage', client_id: null, environment: null },
-      { operation: 'qbo.entity.read', client_id: null, environment: null },
     ])
     const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
     vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
@@ -706,18 +686,55 @@ describe('Google governed access', () => {
     })
     await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
     fireEvent.click(await screen.findByRole('link', { name: 'Change access for Ana' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Role & sign-in' }))
+    fireEvent.click(within(screen.getByRole('group', { name: /^Role$/ })).getByRole('button', { name: /Operator/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to actions and entities' }))
+    expect(screen.getByRole('button', { name: /All available entitiesCurrent only/ })).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(screen.getByRole('button', { name: 'Review changes' }))
+    await screen.findByRole('region', { name: 'Policy impact preview' })
+    const call = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input).endsWith('/access/users/user-2/policy/preview'))
+    expect(JSON.parse(String(call?.[1]?.body)).grants).toEqual([
+      { operation: 'qbo.entity.read', client_id: 'client-1', environment: null },
+      { operation: 'qbo.entity.read', client_id: 'client-2', environment: null },
+      { operation: 'qbo.entity.edit', client_id: 'client-1', environment: null },
+      { operation: 'qbo.entity.edit', client_id: 'client-2', environment: null },
+    ])
+  })
+
+  it('adds only current available entities when choosing all', async () => {
+    mockGoogleSession([
+      { operation: 'access.manage', client_id: null, environment: null },
+      { operation: 'qbo.entity.read', client_id: null, environment: null },
+    ])
+    const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const path = String(input)
+      if (path.endsWith('/access/users')) return Response.json([{ id: 'user-2', email: 'ana@example.test', display_name: 'Ana', role: 'Viewer', status: 'active', issuer: null, sub: null }])
+      if (path.endsWith('/access/grants?user_id=user-2')) return Response.json([
+        { operation: 'qbo.entity.read', client_id: 'client-1', environment: null },
+        { operation: 'qbo.entity.read', client_id: 'client-2', environment: null },
+      ])
+      if (path.endsWith('/clients')) return Response.json([{ id: 'client-1', name: 'First entity' }, { id: 'client-2', name: 'Second entity' }, { id: 'client-3', name: 'New current entity' }])
+      if (path.endsWith('/access/users/user-2/policy/preview') && init?.method === 'POST') return Response.json({ fingerprint: 'fingerprint-1', affected_keys: [], suspended_keys: [] })
+      return baseFetch(input, init)
+    })
+    await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
+    fireEvent.click(await screen.findByRole('link', { name: 'Change access for Ana' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Actions & entities' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add entity access' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add access for All entities' }))
-    expect(screen.getByRole('region', { name: 'Assigned entity access' })).toHaveTextContent('Base access')
-    expect(screen.queryByRole('button', { name: 'Edit access for First entity' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /All available entitiesCurrent only/ }))
+    expect(screen.getByRole('region', { name: 'All entity access' })).toHaveTextContent('No automatic access to future entities')
+    expect(screen.queryByRole('region', { name: 'Access for First entity' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Read QuickBooks data for entity' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Review changes' }))
     const review = await screen.findByRole('region', { name: 'Policy impact preview' })
-    expect(review).toHaveTextContent('Read: 2 selected entities → all entities')
+    expect(review).toHaveTextContent('New current entity')
     expect(review).not.toHaveTextContent('− Read')
     const call = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input).endsWith('/access/users/user-2/policy/preview'))
-    expect(JSON.parse(String(call?.[1]?.body)).grants).toEqual([{ operation: 'qbo.entity.read', client_id: null, environment: null }])
+    expect(JSON.parse(String(call?.[1]?.body)).grants).toEqual([
+      { operation: 'qbo.entity.read', client_id: 'client-1', environment: null },
+      { operation: 'qbo.entity.read', client_id: 'client-2', environment: null },
+      { operation: 'qbo.entity.read', client_id: 'client-3', environment: null },
+    ])
   })
 
   it('converts All entities directly to selected entities without deleting access first', async () => {
@@ -741,11 +758,11 @@ describe('Google governed access', () => {
     await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
     fireEvent.click(await screen.findByRole('link', { name: 'Change access for Ana' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Actions & entities' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Use selected entities instead' }))
-    expect(screen.getByRole('button', { name: 'Select First entity' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Select Second entity' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Select First entity' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Keep selected entities' }))
+    fireEvent.click(screen.getByRole('button', { name: /All available entitiesCurrent only/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Selected entities/ }))
+    expect(screen.getByRole('region', { name: 'Access for First entity' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Access for Second entity' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove access for Second entity' }))
     fireEvent.click(screen.getByRole('button', { name: 'Review changes' }))
     await screen.findByRole('region', { name: 'Policy impact preview' })
     const call = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input).endsWith('/access/users/user-2/policy/preview'))
@@ -754,6 +771,45 @@ describe('Google governed access', () => {
       { operation: 'qbo.entity.read', client_id: 'client-1', environment: null },
       { operation: 'qbo.entity.edit', client_id: 'client-1', environment: null },
     ])
+  })
+
+  it('suggests Edit when Delete is selected without making Edit mandatory', async () => {
+    mockGoogleSession([
+      { operation: 'access.manage', client_id: null, environment: null },
+      { operation: 'qbo.entity.read', client_id: null, environment: null },
+      { operation: 'qbo.entity.edit', client_id: null, environment: null },
+      { operation: 'qbo.entity.delete', client_id: null, environment: null },
+    ])
+    const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const path = String(input)
+      if (path.endsWith('/access/users')) return Response.json([{ id: 'user-2', email: 'ana@example.test', display_name: 'Ana', role: 'Admin', status: 'active', issuer: null, sub: null }])
+      if (path.endsWith('/access/grants?user_id=user-2')) return Response.json([
+        { operation: 'qbo.entity.read', client_id: 'client-1', environment: null },
+        { operation: 'qbo.entity.read', client_id: 'client-2', environment: null },
+      ])
+      if (path.endsWith('/clients')) return Response.json([{ id: 'client-1', name: 'First entity' }, { id: 'client-2', name: 'Second entity' }])
+      return baseFetch(input, init)
+    })
+    await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
+    fireEvent.click(await screen.findByRole('link', { name: 'Change access for Ana' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions & entities' }))
+    const firstEntity = screen.getByRole('region', { name: 'Access for First entity' })
+    fireEvent.click(within(firstEntity).getByRole('button', { name: 'Delete access for First entity' }))
+    expect(within(firstEntity).getByRole('button', { name: 'Edit access for First entity' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(within(firstEntity).getByRole('button', { name: 'Edit access for First entity' }))
+    expect(within(firstEntity).getByRole('button', { name: 'Delete access for First entity' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(firstEntity).getByRole('button', { name: 'Edit access for First entity' })).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: /All available entitiesCurrent only/ }))
+    const allEntities = screen.getByRole('group', { name: 'QuickBooks access for all available entities' })
+    fireEvent.click(within(allEntities).getByRole('button', { name: 'Edit QuickBooks data for entity' }))
+    expect(within(allEntities).getByRole('button', { name: 'Edit QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(within(allEntities).getByRole('button', { name: 'Delete QuickBooks data for entity' }))
+    expect(within(allEntities).getByRole('button', { name: 'Edit QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(within(allEntities).getByRole('button', { name: 'Edit QuickBooks data for entity' }))
+    expect(within(allEntities).getByRole('button', { name: 'Delete QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(allEntities).getByRole('button', { name: 'Edit QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('suggests standard Admin access across existing scopes and console controls', async () => {
@@ -784,23 +840,23 @@ describe('Google governed access', () => {
     fireEvent.click(within(screen.getByRole('group', { name: /^Role$/ })).getByRole('button', { name: /Admin/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Actions & entities' }))
     for (const entity of ['First entity', 'Second entity']) {
-      fireEvent.click(screen.getByRole('button', { name: `Edit access for ${entity}` }))
+      const entityRow = screen.getByRole('region', { name: `Access for ${entity}` })
       expect(screen.queryByRole('button', { name: 'View entity in FinOps' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Read QuickBooks data for entity' })).not.toBeInTheDocument()
-      expect(screen.getByRole('region', { name: 'Editing selected scope' })).toHaveTextContent('Read')
-      expect(screen.getByRole('button', { name: 'Edit QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'true')
+      expect(entityRow).toHaveTextContent('Read')
+      expect(within(entityRow).getByRole('button', { name: `Edit access for ${entity}` })).toHaveAttribute('aria-pressed', 'true')
     }
-    expect(screen.getByRole('button', { name: 'Manage access' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Manage people' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.queryByRole('button', { name: 'Manage entities in FinOps' })).not.toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Console access' })).queryByRole('button', { name: 'Manage entities in FinOps' })).not.toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Editing selected scope' })).not.toHaveTextContent('Manage entities')
-    expect(within(screen.getByRole('region', { name: 'Console access' })).queryByRole('group', { name: 'Entity management coverage' })).not.toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Console access' })).not.toHaveTextContent('Edit/delete assigned entities')
-    fireEvent.click(screen.getByRole('button', { name: 'Edit QuickBooks data for entity' }))
+    expect(within(screen.getByRole('region', { name: 'Admin access' })).queryByRole('button', { name: 'Manage entities in FinOps' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Access for First entity' })).not.toHaveTextContent('Manage entities')
+    expect(within(screen.getByRole('region', { name: 'Admin access' })).queryByRole('group', { name: 'Entity management coverage' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Admin access' })).not.toHaveTextContent('Edit/delete assigned entities')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit access for First entity' }))
     expect(screen.queryByText('Some assigned entities have no Edit QBO. Entity management remains separate.')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit QuickBooks data for entity' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit access for First entity' }))
     expect(screen.getByRole('button', { name: 'View activity history' })).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByRole('button', { name: 'Administer API keys' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByRole('button', { name: 'Administer API keys' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Review changes' }))
     await screen.findByRole('region', { name: 'Policy impact preview' })
     const request = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input).endsWith('/access/users/user-2/policy/preview'))
@@ -839,51 +895,58 @@ describe('Google governed access', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Role & sign-in' }))
     fireEvent.click(within(screen.getByRole('group', { name: /^Role$/ })).getByRole('button', { name: /Admin/ }))
     expect(within(screen.getByRole('group', { name: /^Role$/ })).getByRole('button', { name: /Operator · Saved/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Review changes' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Review changes' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue to actions and entities' })).toBeEnabled()
     fireEvent.click(within(screen.getByRole('group', { name: /^Role$/ })).getByRole('button', { name: /Operator/ }))
     expect(screen.getByRole('button', { name: 'Review changes' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Actions & entities' }))
-    expect(screen.getByRole('button', { name: 'Edit access for Allowed entity' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('region', { name: 'Assigned entity access' })).toHaveTextContent('Allowed entity')
+    expect(screen.getByRole('region', { name: 'Access for Allowed entity' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Available entities' })).toHaveTextContent('Allowed entity')
     expect(screen.queryByRole('button', { name: /Add .* recommendations for this scope/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'View entity in FinOps' })).not.toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Editing selected scope' })).not.toHaveTextContent('QuickBooks connect / reconnect follows this entity access')
+    expect(screen.getByRole('region', { name: 'Access for Allowed entity' })).not.toHaveTextContent('QuickBooks connect / reconnect follows this entity access')
     expect(screen.queryByRole('checkbox', { name: /Connect QuickBooks/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: 'Read QuickBooks data' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review changes' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Edit access for Allowed entity' })).toHaveTextContent('View')
+    expect(screen.getByRole('region', { name: 'Access for Allowed entity' })).toHaveTextContent('Read')
     fireEvent.click(screen.getByRole('button', { name: 'Role & sign-in' }))
     fireEvent.click(within(screen.getByRole('group', { name: /^Role$/ })).getByRole('button', { name: /Admin/ }))
     fireEvent.focus(screen.getByRole('button', { name: 'About suggested access' }))
     expect(screen.getByRole('tooltip')).toHaveTextContent('Recommended access is preselected')
+    expect(screen.getByRole('tooltip')).toHaveClass('bottom-full')
     fireEvent.click(screen.getByRole('button', { name: 'Actions & entities' }))
-    expect(screen.getByRole('button', { name: 'Edit QuickBooks data for entity' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Edit access for Allowed entity' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.queryByRole('checkbox', { name: /Connect QuickBooks/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Manage access' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Manage people' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.queryByRole('button', { name: 'Manage entities in FinOps' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'View activity history' })).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByRole('button', { name: 'Administer API keys' })).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByRole('button', { name: 'Edit access for Allowed entity' })).toHaveTextContent('Read · Edit')
-    expect(screen.getByRole('button', { name: 'Discard changes' })).toHaveTextContent('Reset draft')
+    expect(screen.queryByRole('button', { name: 'Administer API keys' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Access for Allowed entity' })).toHaveTextContent('Read')
+    expect(screen.getByRole('region', { name: 'Access for Allowed entity' })).toHaveTextContent('Edit')
+    expect(screen.queryByRole('button', { name: 'Reset actions and entities' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit access for Allowed entity' }))
+    expect(screen.getByRole('button', { name: 'Reset actions and entities' })).toHaveTextContent('Reset actions & entities')
     expect(screen.getByRole('button', { name: 'Review changes' })).toHaveTextContent('Review changes')
-    expect(screen.getByRole('button', { name: 'Discard changes' })).toHaveClass('icon-first-action')
+    expect(screen.getByRole('button', { name: 'Reset actions and entities' })).toHaveClass('icon-first-action')
     expect(screen.getByRole('button', { name: 'Review changes' })).toHaveClass('icon-first-action')
     const editor = screen.getByRole('dialog')
     expect(editor.querySelector('[data-dialog-header]')).toContainElement(screen.getByRole('button', { name: 'Actions & entities' }))
     expect(editor.querySelector('[data-dialog-header]')).toHaveClass('shrink-0')
     expect(editor.querySelector('[data-dialog-body]')).toHaveClass('min-h-0', 'overflow-y-auto')
     expect(editor.querySelector('[data-dialog-footer]')).toHaveClass('shrink-0')
-    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reset actions and entities' }))
     expect(screen.getByRole('heading', { name: 'Change access for Ana' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Review changes' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Edit access for Allowed entity' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Review changes' })).toBeEnabled()
     expect(screen.queryByRole('checkbox', { name: /Connect QuickBooks/ })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
     fireEvent.click(screen.getByRole('link', { name: 'Change access for Ana' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Actions & entities' }))
-    expect(await screen.findByRole('button', { name: 'Edit access for Allowed entity' })).toHaveTextContent('View')
+    expect(await screen.findByRole('region', { name: 'Access for Allowed entity' })).toHaveTextContent('Read')
   }, 15000)
 
-  it('lets an Admin grant Activity and API key administration without switching entity scope', async () => {
+  it('lets an Admin grant Activity without switching entity scope and hides legacy key administration', async () => {
     mockGoogleSession([
       { id: 'users-grant', operation: 'access.manage', client_id: null, environment: null },
       { id: 'activity-grant', operation: 'activity.read', client_id: null, environment: null },
@@ -901,11 +964,11 @@ describe('Google governed access', () => {
     await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
     fireEvent.click(await screen.findByRole('link', { name: 'Change access for Admin' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Actions & entities' }))
-    expect(screen.getByRole('button', { name: 'Edit access for ACME Sandbox' })).toHaveAttribute('aria-pressed', 'true')
-    const consoleAccess = screen.getByRole('region', { name: 'Console access' })
+    expect(screen.getByRole('region', { name: 'Access for ACME Sandbox' })).toBeInTheDocument()
+    const consoleAccess = screen.getByRole('region', { name: 'Admin access' })
     fireEvent.click(within(consoleAccess).getByRole('button', { name: 'View activity history' }))
-    fireEvent.click(within(consoleAccess).getByRole('button', { name: 'Administer API keys' }))
-    expect(within(consoleAccess).getAllByText('Added')).toHaveLength(2)
+    expect(within(consoleAccess).queryByRole('button', { name: 'Administer API keys' })).not.toBeInTheDocument()
+    expect(within(consoleAccess).getAllByText('Added')).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: 'Review changes' }))
     await screen.findByRole('region', { name: 'Policy impact preview' })
     expect(screen.queryByText(/Admin can manage sensitive access/)).not.toBeInTheDocument()
@@ -913,9 +976,36 @@ describe('Google governed access', () => {
     const body = JSON.parse(String(previewCall?.[1]?.body))
     expect(body.grants).toEqual(expect.arrayContaining([
       { operation: 'activity.read', client_id: null, environment: null },
-      { operation: 'keys.admin', client_id: null, environment: null },
     ]))
   }, 15000)
+
+  it('shows available entities directly when a person has no entity grants', async () => {
+    mockGoogleSession([
+      { operation: 'access.manage', client_id: null, environment: null },
+      { operation: 'qbo.entity.read', client_id: null, environment: null },
+    ])
+    const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const path = String(input)
+      if (path.endsWith('/access/users')) return Response.json([{ id: 'user-2', email: 'viewer@example.test', display_name: 'Viewer', role: 'Viewer', status: 'active', issuer: null, sub: null }])
+      if (path.endsWith('/access/grants?user_id=user-2')) return Response.json([])
+      if (path.endsWith('/clients')) return Response.json([{ id: 'client-1', name: 'ACME' }, { id: 'client-2', name: 'Demo' }])
+      return baseFetch(input, init)
+    })
+    await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
+    fireEvent.click(await screen.findByRole('link', { name: 'Change access for Viewer' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Change access for Viewer' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Actions & entities' }))
+    expect(within(dialog).queryByRole('button', { name: 'Add entity access' })).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /All available entitiesCurrent only/ })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Add access for ACME' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Add access for Demo' })).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add access for ACME' }))
+    expect(within(dialog).getByRole('region', { name: 'Access for ACME' })).toHaveTextContent('Read')
+    expect(within(dialog).getByRole('button', { name: 'Add access for Demo' })).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove access for ACME' }))
+    expect(within(dialog).getByRole('button', { name: 'Add access for ACME' })).toBeInTheDocument()
+  })
 
   it('closes on backdrop without changes and confirms before discarding changes', async () => {
     mockGoogleSession([{ id: 'users-grant', operation: 'access.manage', client_id: null, environment: null }])
@@ -981,6 +1071,10 @@ describe('Google governed access', () => {
     expect(globalThis.fetch).not.toHaveBeenCalledWith('/automations/api/access/users/user-2', expect.objectContaining({ method: 'DELETE' }))
     const confirmation = screen.getByRole('textbox', { name: 'Type DELETE to confirm' })
     expect(confirmation).toHaveAttribute('autocomplete', 'off')
+    expect(fireEvent.paste(confirmation)).toBe(false)
+    expect(fireEvent.drop(confirmation)).toBe(false)
+    expect(confirmation).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Delete person' })).toBeDisabled()
     fireEvent.change(confirmation, { target: { value: 'delete' } })
     expect(screen.getByRole('button', { name: 'Delete person' })).toBeDisabled()
     fireEvent.change(confirmation, { target: { value: 'DELETE' } })
@@ -1033,7 +1127,7 @@ describe('Google governed access', () => {
     expect(within(screen.getByRole('region', { name: 'People' })).queryByText('Jorge')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('link', { name: 'My account' }))
     expect(await screen.findByRole('heading', { name: 'Account access' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Administration access' })).toHaveTextContent('Manage access')
+    expect(screen.getByRole('region', { name: 'Administration access' })).toHaveTextContent('Manage people')
     expect(screen.getByText('jorge@example.test')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Preferences' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Switch to (dark|light) mode/ })).toBeInTheDocument()
@@ -1041,14 +1135,14 @@ describe('Google governed access', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent('Your role sets the actions available; the permissions below show where they apply.')
   })
 
-  it('lets only a Founder create a superadmin without individual grants', async () => {
+  it('lets a superadmin create another superadmin without individual grants', async () => {
     mockGoogleSession([{ operation: 'access.manage', client_id: null, environment: null }])
     const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
     const requests: Array<{ path: string; init?: RequestInit }> = []
     vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
       const path = String(input)
       requests.push({ path, init })
-      if (path.endsWith('/access/me')) return Response.json({ user: { id: 'user-1', role: 'Admin', status: 'active', is_super_admin: true, is_super_admin_founder: true }, effective_grants: [{ operation: 'access.manage', client_id: null, environment: null }] })
+      if (path.endsWith('/access/me')) return Response.json({ user: { id: 'user-1', role: 'Admin', status: 'active', is_super_admin: true, is_super_admin_founder: false }, effective_grants: [{ operation: 'access.manage', client_id: null, environment: null }] })
       if (path.endsWith('/access/users')) return Response.json([])
       if (path.endsWith('/clients')) return Response.json([])
       return baseFetch(input, init)
@@ -1071,6 +1165,127 @@ describe('Google governed access', () => {
     expect(JSON.parse(String(create?.init?.body))).toMatchObject({ email: 'new-admin@example.test', is_super_admin: true, grants: [] })
   })
 
+  it('lets a superadmin promote an existing person, then hides that person from non-Founder management', async () => {
+    let promoted = false
+    const requests: Array<{ path: string; init?: RequestInit }> = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = String(input)
+      requests.push({ path, init })
+      if (path.endsWith('/access/session')) return Response.json({ user: { name: 'Operator', email: 'operator@example.test', issuer: 'https://accounts.google.com', sub: 'operator-sub' }, csrf: 'csrf' })
+      if (path.endsWith('/access/me')) return Response.json({ user: { id: 'user-1', role: 'Admin', status: 'active', is_super_admin: true, is_super_admin_founder: false }, effective_grants: [] })
+      if (path.endsWith('/access/users') && init?.method !== 'POST') return Response.json([
+        { id: 'user-2', email: 'viewer@example.test', display_name: 'Viewer', role: promoted ? 'Admin' : 'Viewer', status: 'active', issuer: null, sub: null, is_super_admin: promoted, is_super_admin_founder: false },
+        { id: 'user-3', email: 'founder@example.test', display_name: 'Founder', role: 'Admin', status: 'active', issuer: null, sub: null, is_super_admin: true, is_super_admin_founder: true },
+      ])
+      if (path.endsWith('/access/users/user-2') && init?.method === 'PATCH') { promoted = true; return Response.json({ is_super_admin: true, role: 'Admin' }) }
+      if (path.includes('/access/grants?user_id=')) return Response.json([])
+      if (path.endsWith('/clients')) return Response.json([])
+      return Response.json({ message: 'Not found' }, { status: 404 })
+    })
+    await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
+    expect(await screen.findByRole('link', { name: 'Change access for Viewer' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Change access for Founder' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: 'Change access for Viewer' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Change access for Viewer' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Actions & entities' }))
+    expect(within(dialog).queryByRole('region', { name: 'Access model' })).not.toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Role & sign-in' }))
+    fireEvent.click(within(within(dialog).getByRole('group', { name: 'Role' })).getByRole('button', { name: /^Admin/ }))
+    const choice = within(dialog).getByRole('dialog', { name: 'Choose admin access' })
+    expect(within(choice).getAllByRole('button')[0]).toHaveTextContent('Choose entities and administrative permissions.')
+    fireEvent.click(within(choice).getAllByRole('button')[0])
+    expect(within(dialog).getByRole('button', { name: 'Continue to actions and entities' })).toBeInTheDocument()
+    fireEvent.click(within(within(dialog).getByRole('group', { name: 'Role' })).getByRole('button', { name: /^Admin/ }))
+    expect(within(dialog).getByRole('dialog', { name: 'Choose admin access' })).toBeInTheDocument()
+    fireEvent.click(within(within(dialog).getByRole('dialog', { name: 'Choose admin access' })).getAllByRole('button')[0])
+    fireEvent.click(within(within(dialog).getByRole('group', { name: 'Role' })).getByRole('button', { name: /^Viewer/ }))
+    fireEvent.click(within(within(dialog).getByRole('group', { name: 'Role' })).getByRole('button', { name: /^Admin/ }))
+    fireEvent.click(within(within(dialog).getByRole('dialog', { name: 'Choose admin access' })).getAllByRole('button')[1])
+    expect(within(dialog).getByRole('alertdialog')).toHaveTextContent('only the Founder can manage this account')
+    expect(within(dialog).queryByRole('region', { name: 'Entity access editor' })).not.toBeInTheDocument()
+    fireEvent.click(within(within(dialog).getByRole('alertdialog')).getByRole('button', { name: 'Make superadmin' }))
+    await waitFor(() => expect(requests.some((request) => request.path.endsWith('/access/users/user-2') && request.init?.method === 'PATCH')).toBe(true))
+    expect(JSON.parse(String(requests.find((request) => request.path.endsWith('/access/users/user-2') && request.init?.method === 'PATCH')?.init?.body))).toEqual({ is_super_admin: true })
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Change access for Viewer' })).not.toBeInTheDocument())
+  })
+
+  it('keeps superadmin demotion pending until new scope is confirmed, and discards on close', async () => {
+    let demoted = false
+    const requests: Array<{ path: string; init?: RequestInit }> = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = String(input)
+      requests.push({ path, init })
+      if (path.endsWith('/access/session')) return Response.json({ user: { name: 'Founder', email: 'founder@example.test', issuer: 'https://accounts.google.com', sub: 'founder-sub' }, csrf: 'csrf' })
+      if (path.endsWith('/access/me')) return Response.json({ user: { id: 'user-1', role: 'Admin', status: 'active', is_super_admin: true, is_super_admin_founder: true }, effective_grants: [] })
+      if (path.endsWith('/access/users') && init?.method !== 'POST') return Response.json([
+        { id: 'user-2', email: 'admin@example.test', display_name: 'Admin', role: 'Admin', status: 'active', issuer: null, sub: null, is_super_admin: !demoted, is_super_admin_founder: false },
+      ])
+      if (path.endsWith('/access/users/user-2/policy') && init?.method === 'PUT') { demoted = true; return Response.json({ fingerprint: 'policy-1', affected_keys: [], suspended_keys: [], changes: [] }) }
+      if (path.includes('/access/grants?user_id=')) return Response.json([])
+      if (path.endsWith('/clients')) return Response.json([{ id: 'client-1', name: 'ACME' }, { id: 'client-2', name: 'Demo' }])
+      if (path.endsWith('/access/users/user-2/policy/preview')) return Response.json({ fingerprint: 'policy-1', affected_keys: [], suspended_keys: [], changes: [] })
+      return Response.json({ message: 'Not found' }, { status: 404 })
+    })
+    await act(async () => render(<MemoryRouter initialEntries={['/access/users?edit=user-2']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
+    const dialog = await screen.findByRole('dialog', { name: 'Change access for Admin' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove superadmin access' }))
+    expect(within(dialog).getByRole('alertdialog')).toHaveTextContent('before anything changes')
+    const removeAndSetAccess = within(dialog).getByRole('button', { name: 'Set new access' })
+    expect(removeAndSetAccess).toHaveClass('bg-hq-teal')
+    expect(removeAndSetAccess).not.toHaveClass('bg-rose-700')
+    fireEvent.click(removeAndSetAccess)
+    expect(await screen.findByText('Superadmin removal pending')).toBeInTheDocument()
+    expect(demoted).toBe(false)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(within(dialog).getByText('Discard your changes?')).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+    expect(demoted).toBe(false)
+    fireEvent.click(await screen.findByRole('link', { name: 'Change access for Admin' }))
+    const reopened = await screen.findByRole('dialog', { name: 'Change access for Admin' })
+    fireEvent.click(within(reopened).getByRole('button', { name: 'Remove superadmin access' }))
+    fireEvent.click(within(reopened).getByRole('button', { name: 'Set new access' }))
+    const updated = screen.getByRole('dialog', { name: 'Change access for Admin' })
+    expect(await within(updated).findByRole('group', { name: 'Role' })).toBeInTheDocument()
+    fireEvent.click(within(within(updated).getByRole('group', { name: 'Role' })).getByRole('button', { name: /Operator/ }))
+    fireEvent.click(within(updated).getByRole('button', { name: 'Reset role and sign-in' }))
+    expect(within(within(updated).getByRole('group', { name: 'Role' })).getByRole('button', { name: /Admin/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(updated).getByText('Superadmin removal pending')).toBeInTheDocument()
+    expect(within(updated).queryByRole('button', { name: 'Reset role and sign-in' })).not.toBeInTheDocument()
+    fireEvent.click(within(updated).getByRole('button', { name: 'Actions & entities' }))
+    expect(within(updated).queryByRole('button', { name: 'Make superadmin' })).not.toBeInTheDocument()
+    expect(within(updated).queryByRole('button', { name: 'Add entity access' })).not.toBeInTheDocument()
+    expect(within(updated).getByRole('button', { name: /All available entitiesCurrent only/ })).toBeInTheDocument()
+    expect(within(updated).getByRole('button', { name: 'Add access for ACME' })).toBeInTheDocument()
+    expect(within(updated).getByRole('button', { name: 'Add access for Demo' })).toBeInTheDocument()
+    fireEvent.click(within(updated).getByRole('button', { name: 'Add access for ACME' }))
+    expect(within(updated).getByRole('region', { name: 'Access for ACME' })).toHaveTextContent('Read')
+    fireEvent.click(within(updated).getByRole('button', { name: 'Reset actions and entities' }))
+    expect(within(updated).getByRole('button', { name: 'Add access for ACME' })).toBeInTheDocument()
+    expect(within(updated).getByRole('button', { name: 'Actions & entities' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(updated).queryByRole('button', { name: 'Remove superadmin access' })).not.toBeInTheDocument()
+    expect(demoted).toBe(false)
+    fireEvent.click(within(updated).getByRole('button', { name: 'Add access for ACME' }))
+    expect(within(updated).getByRole('button', { name: 'Remove access for ACME' })).toBeInTheDocument()
+    fireEvent.click(within(updated).getByRole('button', { name: 'Review changes' }))
+    expect(await within(updated).findByText('Superadmin → Admin')).toBeInTheDocument()
+    expect(within(updated).getByText('1 entity selected. No admin permissions selected.')).toBeInTheDocument()
+    expect(within(updated).getByRole('region', { name: 'Policy impact preview' })).toHaveTextContent('ACME')
+    fireEvent.click(within(updated).getByRole('button', { name: 'Back to editing' }))
+    fireEvent.click(within(updated).getByRole('button', { name: 'Remove access for ACME' }))
+    expect(within(updated).getByRole('button', { name: 'Add access for ACME' })).toBeInTheDocument()
+    expect(within(updated).getByRole('button', { name: 'Review changes' })).toBeDisabled()
+    fireEvent.click(within(updated).getByRole('button', { name: 'Add access for Demo' }))
+    fireEvent.click(within(updated).getByRole('button', { name: 'Review changes' }))
+    expect(await within(updated).findByText('Superadmin → Admin')).toBeInTheDocument()
+    expect(demoted).toBe(false)
+    fireEvent.click(within(updated).getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change access for Admin' })).not.toBeInTheDocument())
+    expect(demoted).toBe(true)
+    const applied = requests.find((request) => request.path.endsWith('/access/users/user-2/policy') && request.init?.method === 'PUT')
+    expect(JSON.parse(String(applied?.init?.body))).toMatchObject({ is_super_admin: false, grants: expect.arrayContaining([{ operation: 'qbo.entity.read', client_id: 'client-2', environment: null }]) })
+    expect(requests.some((request) => request.path.endsWith('/access/users/user-2') && request.init?.method === 'PATCH')).toBe(false)
+  })
+
   it('requires the typed phrase to transfer Founder status to a bound active superadmin', async () => {
     mockGoogleSession([{ operation: 'access.manage', client_id: null, environment: null }])
     const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
@@ -1085,12 +1300,27 @@ describe('Google governed access', () => {
     })
     await act(async () => render(<MemoryRouter initialEntries={['/access/users?edit=user-2']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
     const dialog = await screen.findByRole('dialog', { name: 'Change access for Next founder' })
+    expect(dialog).toHaveTextContent('next-founder@example.test')
+    expect(within(dialog).getByRole('region', { name: 'Current access' })).toHaveTextContent('All current and future entities · All administrative actions')
+    expect(within(dialog).getByRole('heading', { name: 'Founder ownership' })).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Transfer Founder status' }))
+    expect(within(dialog).getByRole('heading', { name: 'Transfer Founder status' })).toBeInTheDocument()
+    expect(within(dialog.querySelector('#founder-transfer-confirmation') as HTMLElement).getByText('next-founder@example.test')).toBeInTheDocument()
+    expect(within(dialog).getByText('Loses Founder ownership; keeps full superadmin access.')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Remove superadmin access' })).not.toBeInTheDocument()
     const confirm = within(dialog).getByRole('button', { name: 'Confirm transfer' })
     expect(confirm).toBeDisabled()
-    fireEvent.change(within(dialog).getByLabelText('Type I AM NO LONGER FOUNDER to confirm'), { target: { value: 'I AM NO LONGER FOUNDER' } })
-    expect(confirm).toBeEnabled()
-    fireEvent.click(confirm)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel transfer' }))
+    expect(within(dialog).queryByRole('button', { name: 'Confirm transfer' })).not.toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Transfer Founder status' }))
+    const reopenedConfirm = within(dialog).getByRole('button', { name: 'Confirm transfer' })
+    const confirmationInput = within(dialog).getByLabelText('Type I AM NO LONGER FOUNDER to confirm')
+    expect(fireEvent.paste(confirmationInput, { clipboardData: { getData: () => 'I AM NO LONGER FOUNDER' } })).toBe(false)
+    expect(fireEvent.drop(confirmationInput, { dataTransfer: { getData: () => 'I AM NO LONGER FOUNDER' } })).toBe(false)
+    expect(confirmationInput).toHaveValue('')
+    fireEvent.change(confirmationInput, { target: { value: 'I AM NO LONGER FOUNDER' } })
+    expect(reopenedConfirm).toBeEnabled()
+    fireEvent.click(reopenedConfirm)
     await waitFor(() => expect(requests.some((request) => request.path.endsWith('/founder-transfer'))).toBe(true))
     const transfer = requests.find((request) => request.path.endsWith('/founder-transfer'))
     expect(transfer?.init?.method).toBe('POST')

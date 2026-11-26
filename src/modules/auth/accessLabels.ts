@@ -2,7 +2,7 @@ export const permissionNames: Record<string, string> = {
   'client.read': 'View entity in FinOps', 'client.create': 'Create entities',
   'client.update': 'Edit entities', 'client.delete': 'Permanently delete entities',
   'qbo.read': 'Read QuickBooks data (legacy)', 'activity.read': 'View activity history',
-  'access.manage': 'Manage access', 'entities.manage': 'Manage entities in FinOps',
+  'access.manage': 'Manage people', 'entities.manage': 'Manage entities in FinOps',
   'qbo.entity.read': 'Read QuickBooks data for entity', 'qbo.entity.edit': 'Edit QuickBooks data for entity',
   'qbo.entity.delete': 'Delete QuickBooks data for entity',
   'keys.admin': 'Administer API keys', 'connection.read': 'View connection status',

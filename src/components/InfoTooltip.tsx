@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Info } from 'lucide-react'
 
-export function InfoTooltip({ label, text, align = 'left' }: { label: string; text: string; align?: 'left' | 'right' }) {
+export function InfoTooltip({ label, text, align = 'left', placement = 'bottom' }: { label: string; text: string; align?: 'left' | 'center' | 'right'; placement?: 'top' | 'bottom' }) {
   const [open, setOpen] = useState(false)
   const tooltipId = useId()
   const rootRef = useRef<HTMLSpanElement>(null)
@@ -52,7 +52,7 @@ export function InfoTooltip({ label, text, align = 'left' }: { label: string; te
         <span
           id={tooltipId}
           role="tooltip"
-          className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full z-30 mt-2 w-72 max-w-[calc(100vw-3rem)] rounded-lg bg-slate-900 px-3 py-2 text-left text-xs font-normal leading-relaxed text-white shadow-lg`}
+          className={`absolute ${align === 'right' ? 'right-0' : align === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0'} ${placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'} z-30 w-72 max-w-[calc(100vw-3rem)] rounded-lg bg-slate-900 px-3 py-2 text-left text-xs font-normal leading-relaxed text-white shadow-lg`}
         >
           {text}
         </span>

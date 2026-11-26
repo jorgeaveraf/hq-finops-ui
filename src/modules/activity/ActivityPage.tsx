@@ -1,8 +1,9 @@
 import { Fragment, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, Copy } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Copy, X } from 'lucide-react'
 import { FilterDropdown } from '../../components/FilterDropdown'
 import { InfoTooltip } from '../../components/InfoTooltip'
 import { ActivityDateFilter } from './ActivityDateFilter'
+import { ActivityPersonFilter } from './ActivityPersonFilter'
 import { apiRequest } from '../../api/finopsApi'
 import { AuthContext } from '../auth/AuthContext'
 
@@ -180,9 +181,9 @@ export function ActivityPage() {
         <span aria-live="polite" className="py-2 text-xs tabular-nums text-slate-500">{loading ? 'Updating…' : error ? 'Activity unavailable' : typeof totalCount === 'number' ? `${totalCount} ${totalCount === 1 ? 'event' : 'events'}` : `${page?.items.length ?? 0} events on this page`}</span>
       </div>
       <div className="grid items-end gap-3 px-4 py-3 sm:grid-cols-2 lg:grid-cols-3">
-        <FilterDropdown label="Person" placeholder="Anyone" value={filters.actorEmail} options={actors.map((actor) => ({value:actor,label:actor}))} onChange={(actorEmail) => applyFilters({...filters, actorEmail})} />
+        <ActivityPersonFilter value={filters.actorEmail} actors={actors} onChange={(actorEmail) => applyFilters({...filters, actorEmail})} />
         <ActivityDateFilter from={filters.from} to={filters.to} onChange={(from,to) => applyFilters({...filters,from,to})} />
-        <FilterDropdown label="Operation" placeholder="Any operation" value={filters.category} options={[{value:'read',label:'Read'},{value:'create',label:'Created'},{value:'update',label:'Updated'},{value:'delete',label:'Deleted'},{value:'other',label:'Other'}]} onChange={selectCategory} />
+        <div><FilterDropdown label="Operation" placeholder="Any operation" value={filters.category} options={[{value:'',label:'Any operation'},{value:'read',label:'Read'},{value:'create',label:'Created'},{value:'update',label:'Updated'},{value:'delete',label:'Deleted'},{value:'other',label:'Other'}]} onChange={selectCategory} />{filters.category && <button type="button" onClick={() => selectCategory('')} className="mt-1.5 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-medium text-hq-teal hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal"><X aria-hidden="true" className="h-3 w-3" />Clear operation</button>}</div>
       </div>
       {(filters.actorEmail || filters.from || filters.category) && <div className="flex justify-end px-4 pb-3"><button type="button" onClick={() => applyFilters(emptyFilters)} className="rounded-lg px-2 py-1 text-xs font-medium text-hq-teal">Clear filters</button></div>}
     </section>
