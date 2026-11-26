@@ -239,7 +239,7 @@ export function ClientDetailPage({ readOnly = false, canUpdate = true, canDelete
             </div>
           </details>
 
-          {(canUpdate || canDelete) && client.source !== 'demo' && <div className="rounded-xl border border-slate-200 bg-white px-5 py-4"><div className="flex flex-wrap items-center gap-3"><div className="min-w-0 flex-1"><h2 className="text-sm font-semibold text-slate-900">Entity actions</h2><p className="text-xs text-slate-600">Changes to this entity require confirmation.</p></div><div className="flex flex-wrap items-center gap-2">
+          {(canUpdate || canDelete) && client.source !== 'demo' && <div className="flex flex-wrap justify-end gap-2">
             {canUpdate && (recordStatus === 'active' ? <button ref={statusActionRef} type="button" onClick={() => setShowDeactivateModal(true)} disabled={isChangingStatus || isDeleting} className="icon-first-action rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 disabled:opacity-50"><PowerOff aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Deactivate entity</span></button> : recordStatus === 'inactive' ? <button ref={statusActionRef} type="button" onClick={() => void handleStatusChange('active')} disabled={isChangingStatus || isDeleting} className="icon-first-action rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-hq-teal hover:bg-hq-teal/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Power aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">{isChangingStatus ? 'Activating...' : 'Activate entity'}</span></button> : <span />)}
             {canDelete && <button
               type="button"
@@ -250,7 +250,7 @@ export function ClientDetailPage({ readOnly = false, canUpdate = true, canDelete
               <Trash2 className="h-4 w-4" aria-hidden="true" />
               <span className="icon-first-label">Delete entity</span>
             </button>}
-          </div></div></div>}
+          </div>}
         </>
       ) : !error ? (
         <Card>

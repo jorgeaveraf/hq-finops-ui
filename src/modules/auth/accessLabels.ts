@@ -28,8 +28,8 @@ export function permissionName(operation: string) {
   if (['qbo', 'report'].includes(area) && resources[resource] && verb) return `${verb} QuickBooks ${resources[resource]}${area === 'report' ? ' report' : ''}`
   return 'Permission description unavailable — contact your administrator'
 }
-export const roleDescriptions: Record<string, string> = {
-  Viewer: 'Can view information within their assigned access.',
-  Operator: 'Can view and edit information within their assigned access.',
-  Admin: 'Can perform administrative actions within their assigned access.',
+export const roleDescriptions: Record<string, string[]> = {
+  Viewer: ['View data*'],
+  Operator: ['Edit data*', 'Connect assigned entities to QuickBooks'],
+  Admin: ['Delete data*', 'Use granted admin tools'],
 }

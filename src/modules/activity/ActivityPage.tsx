@@ -1,5 +1,5 @@
 import { Fragment, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, Copy, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Copy } from 'lucide-react'
 import { FilterDropdown } from '../../components/FilterDropdown'
 import { InfoTooltip } from '../../components/InfoTooltip'
 import { ActivityDateFilter } from './ActivityDateFilter'
@@ -17,13 +17,14 @@ type ActivityItem = {
   client_name: string | null
   target_name: string | null
   target_email?: string | null
+  access_changes?: string[] | null
   record_type?: string | null
   record_name?: string | null
   record_id?: string | null
   linked_payment_id?: string | null
   environment: string | null
   action: string
-  category: 'read' | 'create' | 'update' | 'delete' | 'other'
+  category: 'create' | 'update' | 'delete' | 'other'
   status: 'completed' | 'denied' | 'failed' | 'unknown'
 }
 
@@ -56,8 +57,7 @@ function describeAction(action: string) {
   const description = role ? `changed ${role[1]}'s role to ${role[2]}`
     : access ? `changed ${access[1]}'s access to ${access[2]}`
       : entity ? `changed ${entity[1]}'s status to ${entity[2]}`
-        : base === 'Viewed entity list' ? 'viewed the entity list'
-          : base.charAt(0).toLowerCase() + base.slice(1)
+        : base.charAt(0).toLowerCase() + base.slice(1)
   return attempted ? `tried to ${description}` : description
 }
 
@@ -151,7 +151,6 @@ export function ActivityPage() {
   }
 
   const selectCategory = (category: string) => {
-    if (category === 'read' && scope === 'qbo_transactions') setScope('completed')
     applyFilters({ ...filters, category })
   }
 
@@ -171,7 +170,7 @@ export function ActivityPage() {
   }
 
   return <div className="access-view activity-view mx-auto max-w-6xl space-y-5">
-    <div className="flex items-center gap-1"><h1 className="text-2xl font-semibold text-slate-900">Activity</h1><InfoTooltip label="About Activity history" text="Showing the last 15 days. History is kept for 30 days." /></div>
+    <div className="flex items-center gap-1"><h1 className="text-2xl font-semibold text-slate-900">Activity</h1><InfoTooltip label="About Activity history" text="Showing the last 15 days." /></div>
     <section aria-label="Activity filters" className="rounded-xl border border-slate-200 bg-white">
       <div className="flex flex-wrap items-center justify-between gap-x-4 border-b border-slate-200 px-4" >
         <div className="flex gap-6" role="group" aria-label="Activity view">
@@ -183,7 +182,7 @@ export function ActivityPage() {
       <div className="grid items-end gap-3 px-4 py-3 sm:grid-cols-2 lg:grid-cols-3">
         <ActivityPersonFilter value={filters.actorEmail} actors={actors} onChange={(actorEmail) => applyFilters({...filters, actorEmail})} />
         <ActivityDateFilter from={filters.from} to={filters.to} onChange={(from,to) => applyFilters({...filters,from,to})} />
-        <div><FilterDropdown label="Operation" placeholder="Any operation" value={filters.category} options={[{value:'',label:'Any operation'},{value:'read',label:'Read'},{value:'create',label:'Created'},{value:'update',label:'Updated'},{value:'delete',label:'Deleted'},{value:'other',label:'Other'}]} onChange={selectCategory} />{filters.category && <button type="button" onClick={() => selectCategory('')} className="mt-1.5 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-medium text-hq-teal hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal"><X aria-hidden="true" className="h-3 w-3" />Clear operation</button>}</div>
+        <FilterDropdown label="Operation" placeholder="Any operation" value={filters.category} options={[{value:'',label:'Any operation'},{value:'create',label:'Created'},{value:'update',label:'Updated'},{value:'delete',label:'Deleted'},{value:'other',label:'Other'}]} onChange={selectCategory} />
       </div>
       {(filters.actorEmail || filters.from || filters.category) && <div className="flex justify-end px-4 pb-3"><button type="button" onClick={() => applyFilters(emptyFilters)} className="rounded-lg px-2 py-1 text-xs font-medium text-hq-teal">Clear filters</button></div>}
     </section>
@@ -211,9 +210,11 @@ export function ActivityPage() {
                 </div>
               </div>
             </div>
-            {(item.record_type || item.reference_id) && <details className="group mt-2 text-xs text-slate-600">
+            {(item.record_type || item.reference_id || item.access_changes) && <details className="group mt-2 text-xs text-slate-600">
               <summary className="w-fit cursor-pointer list-none font-medium text-hq-teal hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal">Details <span aria-hidden="true" className="inline-block transition-transform group-open:rotate-90">›</span></summary>
               <dl className="mt-2 grid gap-x-6 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+                {item.access_changes && <div className="sm:col-span-2"><dt className="font-medium text-slate-800">Access changes</dt>{item.access_changes.length > 0 ? <dd><ul className="mt-1 list-inside list-disc space-y-1">{item.access_changes.map((change, changeIndex) => <li key={`${change}-${changeIndex}`}>{change}</li>)}</ul></dd> : <dd>No effective access change recorded.</dd>}</div>}
+                {item.action.startsWith('Updated access for ') && !item.access_changes && <div className="sm:col-span-2"><dt className="font-medium text-slate-800">Access changes</dt><dd>This older event did not retain the individual changes.</dd></div>}
                 {item.record_type && item.status !== 'completed' && <div><dt className="text-slate-500">Result</dt><dd className="font-medium text-slate-800">{item.status}</dd></div>}
                 {item.record_type && <div><dt className="text-slate-500">QuickBooks record</dt><dd className="font-medium text-slate-800">{item.record_type}{item.record_name ? ` · ${item.record_name}` : ''}</dd></div>}
                 {item.record_id && <div><dt className="text-slate-500">QuickBooks ID</dt><dd className="break-all font-medium text-slate-800">{item.record_id}</dd></div>}

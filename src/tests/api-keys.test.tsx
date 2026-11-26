@@ -87,6 +87,23 @@ describe('user-owned API keys', () => {
     expect(screen.getByRole('button', { name: 'Continue to key details' })).toBeEnabled()
   })
 
+  it('skips purpose selection without Manage entities permission', async () => {
+    mockKeyApi([], {}, [{ operation: 'qbo.entity.read', client_id: null, environment: null }])
+    const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => String(input).endsWith('/access/me')
+      ? Response.json({ user: { id: 'user-1', role: 'Viewer', status: 'active' }, effective_grants: [{ operation: 'qbo.entity.read', client_id: null, environment: null }] })
+      : baseFetch(input, init))
+    await act(async () => render(<MemoryRouter initialEntries={['/access/keys']}><AuthProvider><MyApiKeysPage /></AuthProvider></MemoryRouter>))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create API key' }))
+    expect(screen.getByRole('textbox', { name: 'Key name' })).toBeInTheDocument()
+    expect(screen.getByText('Work with QuickBooks data')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'API key setup steps' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Administer QBO Gateway entities/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Back to key type' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close API key setup' }))
+    expect(screen.queryByText('Discard this API key?')).not.toBeInTheDocument()
+  })
+
   it('keeps all-entity key access global when the owner can reach future entities', async () => {
     const { requests } = mockKeyApi([], {}, [
       { operation: 'client.read', client_id: null, environment: null },
@@ -114,6 +131,98 @@ describe('user-owned API keys', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Selected entities' }))
     expect(screen.getByRole('button', { name: 'Select ACME Sandbox' })).toBeInTheDocument()
     expect(requests.some((request) => request.path.endsWith('/clients'))).toBe(true)
+  })
+
+  it('keeps the selected-entity draft when an entity key visits all accessible entities', async () => {
+    mockKeyApi([], {}, [
+      { operation: 'client.read', client_id: 'client-1', environment: null },
+      { operation: 'client.read', client_id: 'client-2', environment: null },
+    ])
+    await act(async () => render(<MemoryRouter initialEntries={['/access/keys']}><AuthProvider><MyApiKeysPage /></AuthProvider></MemoryRouter>))
+    await openCreate('entities')
+    const selectedTab = screen.getByRole('button', { name: 'Selected entities' })
+    const allTab = screen.getByRole('button', { name: /All accessible entities/ })
+    expect(selectedTab.compareDocumentPosition(allTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(selectedTab)
+    fireEvent.click(screen.getByRole('button', { name: 'Select ACME Sandbox' }))
+    expect(screen.getByRole('button', { name: 'Select ACME Sandbox' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Select Northwind' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(allTab)
+    fireEvent.click(selectedTab)
+    expect(screen.getByRole('button', { name: 'Select ACME Sandbox' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Select Northwind' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+  })
+
+  it('keeps the selected-entity draft when a QBO key visits all entities', async () => {
+    mockKeyApi([], {}, [
+      { operation: 'qbo.entity.read', client_id: null, environment: null },
+    ])
+    await act(async () => render(<MemoryRouter initialEntries={['/access/keys']}><AuthProvider><MyApiKeysPage /></AuthProvider></MemoryRouter>))
+    await openCreate('qbo')
+    const selectedTab = screen.getByRole('button', { name: 'Selected entities' })
+    const allTab = screen.getByRole('button', { name: /All entities.*Current and future/ })
+    expect(selectedTab.compareDocumentPosition(allTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(selectedTab)
+    fireEvent.click(screen.getByRole('button', { name: 'Select Northwind' }))
+    expect(screen.getByRole('button', { name: 'Select Northwind' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(allTab)
+    fireEvent.click(selectedTab)
+    expect(screen.getByRole('button', { name: 'Select Northwind' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Select ACME Sandbox' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+  })
+
+  it('offers selected and all-current scope for a QBO key without global grants', async () => {
+    const { requests } = mockKeyApi([], {}, [
+      { operation: 'qbo.entity.read', client_id: 'client-1', environment: null },
+      { operation: 'qbo.entity.edit', client_id: 'client-1', environment: null },
+      { operation: 'qbo.entity.read', client_id: 'client-2', environment: null },
+      { operation: 'qbo.entity.edit', client_id: 'client-2', environment: null },
+    ])
+    await act(async () => render(<MemoryRouter initialEntries={['/access/keys']}><AuthProvider><MyApiKeysPage /></AuthProvider></MemoryRouter>))
+    await openCreate('qbo')
+    const selectedTab = screen.getByRole('button', { name: 'Selected entities' })
+    const allTab = screen.getByRole('button', { name: /All available entities/ })
+    expect(selectedTab).toHaveAttribute('aria-pressed', 'true')
+    expect(selectedTab.compareDocumentPosition(allTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Select ACME Sandbox' }))
+    fireEvent.click(allTab)
+    expect(screen.getByLabelText('Key setup summary')).toHaveTextContent('2 current available entities')
+    expect(screen.getByText('Future entities are not included.', { exact: false })).toBeInTheDocument()
+    const editAll = screen.getByRole('button', { name: 'Edit' })
+    fireEvent.click(editAll)
+    expect(editAll).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(selectedTab)
+    expect(screen.getByRole('button', { name: 'Select ACME Sandbox' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Select Northwind' })).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(allTab)
+    expect(screen.getByRole('button', { name: 'Edit' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Key name' }), { target: { value: 'All current QBO entities' } })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Create key' })))
+    const issued = requests.find((request) => request.path.endsWith('/access/keys') && request.init?.method === 'POST')
+    expect(JSON.parse(String(issued?.init?.body)).grants).toEqual(expect.arrayContaining([
+      { operation: 'qbo.entity.read', client_id: 'client-1', environment: null },
+      { operation: 'qbo.entity.edit', client_id: 'client-1', environment: null },
+      { operation: 'qbo.entity.read', client_id: 'client-2', environment: null },
+      { operation: 'qbo.entity.edit', client_id: 'client-2', environment: null },
+    ]))
+    expect(JSON.parse(String(issued?.init?.body)).grants).toHaveLength(4)
+  })
+
+  it('offers all-current Edit only when every available entity permits it', async () => {
+    mockKeyApi([], {}, [
+      { operation: 'qbo.entity.read', client_id: 'client-1', environment: null },
+      { operation: 'qbo.entity.edit', client_id: 'client-1', environment: null },
+      { operation: 'qbo.entity.read', client_id: 'client-2', environment: null },
+    ])
+    await act(async () => render(<MemoryRouter initialEntries={['/access/keys']}><AuthProvider><MyApiKeysPage /></AuthProvider></MemoryRouter>))
+    await openCreate('qbo')
+    fireEvent.click(screen.getByRole('button', { name: /All available entities/ }))
+    expect(within(screen.getByRole('group', { name: 'All available entities QBO access level' })).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Selected entities' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Select ACME Sandbox' }))
+    expect(screen.getByRole('group', { name: 'QuickBooks access for ACME Sandbox' })).toHaveTextContent('Edit')
   })
 
   it('blocks a duplicate active name and allows a distinct one', async () => {
@@ -157,6 +266,8 @@ describe('user-owned API keys', () => {
     await act(async () => render(<MemoryRouter initialEntries={['/access/keys']}><AuthProvider><MyApiKeysPage /></AuthProvider></MemoryRouter>))
     await openCreate()
     expect(screen.getByRole('region', { name: 'Key permissions' })).not.toHaveTextContent('QuickBooks connections')
+    expect(within(screen.getByRole('region', { name: 'Key permissions' })).getAllByText('Entity scope')).toHaveLength(1)
+    expect(screen.queryByText('Access for this key')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Connect QuickBooks/ })).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Key name'), { target: { value: 'QBO setup' } })
     await reviewAndCreateKey()
@@ -219,6 +330,32 @@ describe('user-owned API keys', () => {
     expect(screen.getByText('••••xyz123')).toBeInTheDocument()
   })
 
+  it('shows a newly created key even when an earlier entity filter would hide it', async () => {
+    const base = { owner_user_id: 'user-1', secret_suffix: null, status: 'active', created_at: '2026-11-17T00:00:00Z', last_used_at: null, expires_at: null, revoked_at: null, replaces_key_id: null }
+    mockKeyApi([
+      { ...base, id: 'northwind-1', name: 'Northwind first' },
+      { ...base, id: 'northwind-2', name: 'Northwind second' },
+    ], {
+      'northwind-1': [{ operation: 'client.read', client_id: 'client-2', environment: null }],
+      'northwind-2': [{ operation: 'client.read', client_id: 'client-2', environment: null }],
+    })
+    await act(async () => render(<MemoryRouter initialEntries={['/access/keys']}><AuthProvider><MyApiKeysPage /></AuthProvider></MemoryRouter>))
+    fireEvent.click(screen.getByRole('button', { name: 'Entity Any entity' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Northwind' }))
+    expect(screen.getByRole('status')).toHaveTextContent('2 of 2 keys shown')
+
+    await openCreate()
+    fireEvent.click(screen.getByRole('button', { name: 'Selected entities' }))
+    fireEvent.change(screen.getByLabelText('Key name'), { target: { value: 'ACME new key' } })
+    await reviewAndCreateKey()
+    expect(await screen.findByRole('dialog', { name: 'New API key secret' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+
+    expect(screen.getByRole('button', { name: 'View access for ACME new key (ending xyz123)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Entity Any entity' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('API key created.')
+  })
+
   it('starts without key permissions and adds one entity with a single click', async () => {
     const { requests } = mockKeyApi([], {}, [
       { id: 'grant-1', operation: 'client.read', client_id: 'client-1', environment: null },
@@ -263,8 +400,13 @@ describe('user-owned API keys', () => {
     expect(screen.getByText('1000 selected')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }))
     expect(screen.getByText('0 selected')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Select all 1000 entities' }))
+    const entityActions = screen.getByRole('group', { name: 'Entity selection actions' })
+    fireEvent.click(within(entityActions).getByRole('button', { name: 'Select all available' }))
     expect(screen.getByText('1000 selected')).toBeInTheDocument()
+    expect(within(entityActions).getByRole('button', { name: 'Select all available' })).toBeDisabled()
+    fireEvent.click(within(entityActions).getByRole('button', { name: 'Show selected' }))
+    expect(within(entityActions).getByRole('button', { name: 'Show selected' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(within(entityActions).getByRole('button', { name: 'Show selected' }))
     fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }))
     fireEvent.change(screen.getByRole('searchbox', { name: 'Find an entity' }), { target: { value: '0007' } })
     fireEvent.click(screen.getByRole('button', { name: 'Select Entity 0007' }))
@@ -285,13 +427,13 @@ describe('user-owned API keys', () => {
     await act(async () => render(<MemoryRouter initialEntries={['/access/keys']}><AuthProvider><MyApiKeysPage /></AuthProvider></MemoryRouter>))
     await openCreate('qbo')
     fireEvent.click(screen.getByRole('button', { name: 'Select ACME Sandbox' }))
-    expect(screen.getByRole('button', { name: 'Read' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Edit' })).toHaveAttribute('aria-pressed', 'false')
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    expect(screen.getByRole('button', { name: 'Read' })).toBeDisabled()
+    expect(within(screen.getByRole('group', { name: 'QuickBooks access for ACME Sandbox' })).getByText('Read')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit access for ACME Sandbox' })).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit access for ACME Sandbox' }))
+    expect(screen.getByRole('button', { name: 'Edit access for ACME Sandbox' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.queryByRole('button', { name: /Permanently delete entities/ })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Select Northwind' }))
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Edit access for Northwind' })).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Key name'), { target: { value: 'Two entities' } })
     await reviewAndCreateKey()
     const issuance = requests.find((request) => request.path.endsWith('/access/keys') && request.init?.method === 'POST')
@@ -302,7 +444,7 @@ describe('user-owned API keys', () => {
     ])
   })
 
-  it('bulk-applies an access level to 100 entities and lets one be excluded', async () => {
+  it('selects 100 entities but edits and removes access per entity', async () => {
     const { requests } = mockKeyApi([], {}, [
       { operation: 'qbo.entity.read', client_id: null, environment: null },
       { operation: 'qbo.entity.edit', client_id: null, environment: null },
@@ -314,20 +456,20 @@ describe('user-owned API keys', () => {
     await act(async () => render(<MemoryRouter initialEntries={['/access/keys']}><AuthProvider><MyApiKeysPage /></AuthProvider></MemoryRouter>))
     await openCreate('qbo')
     fireEvent.click(screen.getByRole('button', { name: 'Selected entities' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Select all 100 entities' }))
+    const entityActions = screen.getByRole('group', { name: 'Entity selection actions' })
+    fireEvent.click(within(entityActions).getByRole('button', { name: 'Select all available' }))
     expect(screen.getByText('100 selected')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit access for Entity 000' }))
     fireEvent.change(screen.getByRole('searchbox', { name: 'Find an entity' }), { target: { value: '099' } })
     fireEvent.click(screen.getByRole('button', { name: 'Select Entity 099' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Remove access' }))
     expect(screen.getByText('99 selected')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Key name'), { target: { value: 'Bulk scoped worker' } })
     await reviewAndCreateKey()
     const issuance = requests.find((request) => request.path.endsWith('/access/keys') && request.init?.method === 'POST')
     const grants = JSON.parse(String(issuance?.init?.body)).grants as { operation: string; client_id: string | null }[]
-    expect(grants).toHaveLength(198)
+    expect(grants).toHaveLength(100)
     expect(grants.some((grant) => grant.client_id === 'client-99')).toBe(false)
-    expect(grants.filter((grant) => grant.operation === 'qbo.entity.edit')).toHaveLength(99)
+    expect(grants.filter((grant) => grant.operation === 'qbo.entity.edit')).toHaveLength(1)
   })
 
   it('shows inherited access directly and excludes legacy Connect grants on issuance', async () => {
@@ -370,6 +512,9 @@ describe('user-owned API keys', () => {
     })
     await act(async () => render(<MemoryRouter initialEntries={['/access/keys']}><AuthProvider><MyApiKeysPage /></AuthProvider></MemoryRouter>))
     await openCreate('qbo')
+    const selectedScope = screen.getByRole('button', { name: 'Selected entities' })
+    const allScope = screen.getByRole('button', { name: /All entities.*Current and future/ })
+    expect(selectedScope.compareDocumentPosition(allScope) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(await screen.findByRole('button', { name: /All entities.*Current and future/ })).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'Selected entities' }))
     expect(screen.getByRole('button', { name: 'Create key' })).toBeDisabled()
@@ -378,7 +523,7 @@ describe('user-owned API keys', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Find an entity' }), { target: { value: 'Reporting' } })
     fireEvent.click(screen.getByRole('button', { name: 'Select Demo · Reporting Office' }))
     expect(screen.getByRole('button', { name: 'Select Demo · Reporting Office' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Read' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(screen.getByRole('group', { name: 'QuickBooks access for Demo · Reporting Office' })).getByText('Read')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Key name'), { target: { value: 'Reporting worker' } })
     await reviewAndCreateKey()
     const issuance = requests.find((request) => request.path.endsWith('/access/keys') && request.init?.method === 'POST')
@@ -391,7 +536,7 @@ describe('user-owned API keys', () => {
     await openCreate()
     expect(screen.queryByLabelText('Expires on')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'No expiration' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByText(/Dated keys: up to 120 days/)).toBeInTheDocument()
+    expect(screen.queryByText(/Active until revoked|Dated keys: up to 120 days/)).not.toBeInTheDocument()
     expect(screen.getByLabelText('Key setup summary')).toHaveTextContent('Until revoked')
     fireEvent.click(screen.getByRole('button', { name: '30 days' }))
     expect(screen.getByRole('button', { name: '30 days' })).toHaveAttribute('aria-pressed', 'true')
@@ -605,7 +750,7 @@ describe('user-owned API keys', () => {
     expect(detail).not.toHaveTextContent('Edit QuickBooks data for entity')
   })
 
-  it('filters by one matching grant without duplicating keys across entities or actions', async () => {
+  it('filters keys by entity without an action filter or duplicate rows', async () => {
     const base = { owner_user_id: 'user-1', secret_suffix: null, status: 'active', created_at: '2026-11-17T00:00:00Z', last_used_at: null, expires_at: null, revoked_at: null, replaces_key_id: null }
     mockKeyApi([
       { ...base, id: 'acme-read', name: 'ACME reader' },
@@ -625,11 +770,9 @@ describe('user-owned API keys', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Entity Any entity' }))
     fireEvent.click(await screen.findByRole('option', { name: 'ACME Sandbox' }))
     expect(screen.getByRole('status')).toHaveTextContent('4 of 5 keys shown')
-    fireEvent.click(screen.getByRole('button', { name: 'Action Any action' }))
-    fireEvent.click(screen.getByRole('option', { name: 'Edit QuickBooks data for entity' }))
-    expect(screen.getByRole('status')).toHaveTextContent('1 of 5 keys shown')
+    expect(screen.queryByRole('button', { name: /Action Any action/ })).not.toBeInTheDocument()
     expect(screen.getByText('ACME editor')).toBeInTheDocument()
-    expect(screen.queryByText('Split scope')).not.toBeInTheDocument()
+    expect(screen.getByText('Split scope')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
     expect(within(screen.getByRole('region', { name: 'API keys' })).getAllByRole('listitem')).toHaveLength(5)
     const splitScope = screen.getByRole('button', { name: 'View access for Split scope' }).closest('li') as HTMLElement
@@ -690,8 +833,9 @@ describe('user-owned API keys', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Select Northwind' }))
     expect(screen.queryByText(/Apply to 2 selected/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    expect(screen.getByRole('button', { name: 'Edit' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit access for ACME Sandbox' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit access for Northwind' }))
+    expect(screen.getByRole('button', { name: 'Edit access for ACME Sandbox' })).toHaveAttribute('aria-pressed', 'true')
     fireEvent.change(screen.getByRole('textbox', { name: 'Key name' }), { target: { value: 'Scoped edit worker' } })
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Create key' })))
     const request = requests.find((entry) => entry.path.endsWith('/access/keys') && entry.init?.method === 'POST')

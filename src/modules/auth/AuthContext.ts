@@ -29,6 +29,7 @@ export type AuthContextValue = {
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
   startGoogleLogin: () => void
+  refreshAccess: () => Promise<MyAccess>
 }
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined)

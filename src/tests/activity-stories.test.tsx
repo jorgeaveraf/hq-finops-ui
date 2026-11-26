@@ -1,8 +1,46 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { ActivityPage } from '../modules/activity/ActivityPage'
+import { ActivityPersonFilter } from '../modules/activity/ActivityPersonFilter'
+import { ActivityDateFilter } from '../modules/activity/ActivityDateFilter'
 
-afterEach(() => vi.restoreAllMocks())
+const originalShowModal = HTMLDialogElement.prototype.showModal
+const originalClose = HTMLDialogElement.prototype.close
+afterEach(() => {
+  vi.restoreAllMocks()
+  HTMLDialogElement.prototype.showModal = originalShowModal
+  HTMLDialogElement.prototype.close = originalClose
+})
+
+it('keeps a long person list scrollable and lets the last email be selected', () => {
+  const onChange = vi.fn()
+  const actors = Array.from({ length: 40 }, (_, index) => `person${String(index).padStart(2, '0')}@example.test`)
+  render(<ActivityPersonFilter value="" actors={actors} onChange={onChange} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Person Everyone' }))
+  const suggestions = screen.getByLabelText('Email suggestions')
+  expect(suggestions).toHaveClass('max-h-44', 'overflow-y-auto')
+  expect(within(suggestions).getAllByRole('button')).toHaveLength(40)
+  fireEvent.click(within(suggestions).getByRole('button', { name: 'person39@example.test' }))
+  expect(onChange).toHaveBeenCalledWith('person39@example.test')
+})
+
+it('does not navigate to months before the visible 15-day range', () => {
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+  HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-26T12:00:00'))
+  try {
+    render(<ActivityDateFilter from="" to="" onChange={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'When Any time' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Choose dates…' }))
+    expect(screen.getByRole('button', { name: 'Previous month' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Nov 11, 2026' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Nov 12, 2026' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  } finally {
+    vi.useRealTimers()
+  }
+})
 
 it('presents completed events without a redundant status label', async () => {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -21,7 +59,8 @@ it('presents completed events without a redundant status label', async () => {
   expect(history).toHaveTextContent('November 18, 2026')
   expect(screen.queryByText(/Showing the last 15 days/)).not.toBeInTheDocument()
   fireEvent.focus(screen.getByRole('button', { name: 'About Activity history' }))
-  expect(screen.getByRole('tooltip')).toHaveTextContent('History is kept for 30 days.')
+  expect(screen.getByRole('tooltip')).toHaveTextContent('Showing the last 15 days.')
+  expect(screen.getByRole('tooltip')).not.toHaveTextContent('30 days')
   expect(events[0]).toHaveTextContent('jorge.vera@headquarters.co granted fna@headquarters.co permission to edit entities')
   expect(events[1]).toHaveTextContent('Jorge Vera revoked their own permission to delete entities')
   expect(events[1]).not.toHaveTextContent('Completed')
@@ -30,7 +69,7 @@ it('presents completed events without a redundant status label', async () => {
   expect(history).not.toHaveTextContent('Not permitted')
 })
 
-it('filters by operation and includes successful reads when Read is selected', async () => {
+it('does not offer Read as an Activity operation', async () => {
   const requests: string[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input)
@@ -41,9 +80,13 @@ it('filters by operation and includes successful reads when Read is selected', a
   render(<ActivityPage />)
   await screen.findByText('No activity found')
   fireEvent.click(screen.getByRole('button', { name: /^Operation / }))
-  fireEvent.click(screen.getByRole('option', { name: 'Read' }))
-  await waitFor(() => expect(requests.at(-1)).toContain('scope=completed&page=1&category=read'))
-  expect(screen.getByRole('button', { name: 'All activity' })).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.queryByRole('option', { name: 'Read' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('option', { name: 'Updated' }))
+  expect(screen.queryByRole('button', { name: 'Clear operation' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /^Operation / }))
+  fireEvent.click(screen.getByRole('option', { name: 'Any operation' }))
+  await waitFor(() => expect(requests.at(-1)).not.toContain('category='))
+  expect(requests.at(-1)).toContain('scope=qbo_transactions&page=1')
 })
 
 it('can clear a date filter with Any time', async () => {
@@ -85,4 +128,23 @@ it('shows the QuickBooks record and a concise audit detail', async () => {
   expect(event).toHaveTextContent('API keytest 2')
   expect(event).toHaveTextContent('Support referencereq-vendor')
   expect(within(event).getByRole('button', { name: 'Copy support reference' })).toBeInTheDocument()
+})
+
+it('shows concrete permission changes in an access event', async () => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    if (String(input).endsWith('/access/activity/actors')) return Response.json([])
+    return Response.json({ items: [{
+      id: 'policy', occurred_at: '2026-11-26T15:57:00Z', reference_id: 'req-policy',
+      actor: 'founder@example.test', key_name: null, client_name: null,
+      target_name: 'Fiona', target_email: 'fna@example.test', environment: null,
+      action: 'Updated Fiona: 2 entity permissions granted',
+      access_changes: ['Granted Read QuickBooks data on ACME', 'Granted Edit QuickBooks data on ACME'],
+      category: 'update', status: 'completed',
+    }], next_cursor: null, total_count: 1 })
+  })
+  render(<ActivityPage />)
+  const event = await screen.findByRole('article')
+  fireEvent.click(within(event).getByText('Details'))
+  expect(event).toHaveTextContent('Granted Read QuickBooks data on ACME')
+  expect(event).toHaveTextContent('Granted Edit QuickBooks data on ACME')
 })

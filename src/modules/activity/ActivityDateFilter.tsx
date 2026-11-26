@@ -15,6 +15,7 @@ export function ActivityDateFilter({ from, to, onChange }: { from: string; to: s
   const earliest = new Date()
   earliest.setDate(earliest.getDate() - 14)
   const earliestDate = dateValue(earliest)
+  const earliestMonth = new Date(earliest.getFullYear(), earliest.getMonth(), 1).getTime()
   useEffect(() => {
     if (!open) return
     const previous = document.activeElement as HTMLElement | null
@@ -45,7 +46,7 @@ export function ActivityDateFilter({ from, to, onChange }: { from: string; to: s
       <p className="mt-1 text-sm text-slate-600">Select dates within the last 15 days.</p>
       <p aria-live="polite" className="my-4 rounded-lg bg-slate-50 p-3 text-sm">{start ? displayDate(start) : 'Start date'} → {end ? displayDate(end) : 'End date'}</p>
       <div className="mb-3 flex items-center justify-between">
-        <button type="button" aria-label="Previous month" className="rounded-lg p-2 hover:bg-slate-100" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={20} /></button>
+        <button type="button" aria-label="Previous month" disabled={month.getTime() <= earliestMonth} className="rounded-lg p-2 hover:bg-slate-100 disabled:opacity-30" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={20} /></button>
         <span aria-live="polite" className="text-sm font-semibold">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
         <button type="button" aria-label="Next month" disabled={month.getFullYear() === new Date().getFullYear() && month.getMonth() === new Date().getMonth()} className="rounded-lg p-2 hover:bg-slate-100 disabled:opacity-30" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={20} /></button>
       </div>

@@ -78,6 +78,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     window.location.assign('/automations/api/auth/google/start')
   }
 
+  const refreshAccess = async () => {
+    const myAccess = await apiRequest<MyAccess>('/access/me')
+    setAccess(myAccess)
+    return myAccess
+  }
+
   const logout = async () => {
     await apiRequest(kind === 'google' ? '/access/session' : '/session', { method: 'DELETE' })
     setCsrfToken(null)
@@ -88,6 +94,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
     window.location.replace(`${import.meta.env.BASE_URL}login`)
   }
 
-  const value = { user, role, kind, access, authError, isAuthenticated: Boolean(user), isLoading, login, logout, startGoogleLogin }
+  const value = { user, role, kind, access, authError, isAuthenticated: Boolean(user), isLoading, login, logout, startGoogleLogin, refreshAccess }
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
