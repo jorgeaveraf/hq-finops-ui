@@ -62,6 +62,13 @@ export async function updateClientStatus(clientId: string, status: 'active' | 'i
   })
 }
 
+export async function updateClientDetails(clientId: string, name: string, clientGroup: string): Promise<QboClient> {
+  return apiRequest<QboClient>(`/clients/${clientId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name, client_group: clientGroup }),
+  })
+}
+
 export async function deleteClient(clientId: string): Promise<void> {
   await apiRequest(`/clients/${clientId}`, { method: 'DELETE' })
 }

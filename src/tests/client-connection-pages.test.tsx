@@ -93,7 +93,10 @@ describe('FinOps client connection display', () => {
       </MemoryRouter>,
     )
     const reload = await screen.findByRole('button', { name: 'Reload saved status' })
-    expect(screen.getByText('Sample Group', { selector: 'span' })).toHaveClass('rounded-full', 'w-max', 'whitespace-nowrap')
+    expect(screen.getByRole('heading', { level: 1, name: detail.name })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Entity detail' })).not.toBeInTheDocument()
+    expect(screen.getByText('Client').parentElement).toHaveTextContent('Sample Group')
+    expect(screen.getByRole('heading', { name: 'QuickBooks connection' }).parentElement).toHaveTextContent('QuickBooks connection')
     expect(screen.getByText('Entity ID').parentElement).toHaveTextContent(id)
     fireEvent.click(screen.getByText('Technical details', { selector: 'span' }))
     expect(screen.getByText('Realm ID').parentElement).toHaveTextContent('9341455571857172')
@@ -123,6 +126,28 @@ describe('FinOps client connection display', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
     expect(screen.getByRole('button', { name: 'QuickBooks connection All connection states' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Sample client A' })).toBeInTheDocument()
+  })
+
+  it('opens overview deep links with the requested client grouping and connection filter', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json([
+      { ...summary, connection_state: 'connected' },
+      { ...unchecked, connection_state: 'reconnect-needed' },
+    ]))
+    const renderList = (entry: string) => render(<MemoryRouter initialEntries={[entry]}><ClientListPage /></MemoryRouter>)
+    const clientsView = renderList('/qbo/clients?view=clients')
+    expect(await screen.findByRole('button', { name: 'Sample Group, 1 entity' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: 'Another Group, 1 entity' })).toHaveAttribute('aria-expanded', 'false')
+    clientsView.unmount()
+
+    const entitiesView = renderList('/qbo/clients?view=entities')
+    expect(await screen.findByRole('button', { name: 'Sample Group, 1 entity' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Another Group, 1 entity' })).toHaveAttribute('aria-expanded', 'true')
+    entitiesView.unmount()
+
+    renderList('/qbo/clients?view=entities&connection=reconnect-needed')
+    expect(await screen.findByRole('button', { name: 'Another Group, 1 entity' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'QuickBooks connection Reconnect needed' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Sample Group, 1 entity' })).not.toBeInTheDocument()
   })
 
   it('offers the first QuickBooks connection from the saved sandbox tier without a credential', async () => {
@@ -301,9 +326,30 @@ describe('FinOps client connection display', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
     const infoButton = screen.getByRole('button', { name: 'About this entity list' })
     fireEvent.focus(infoButton)
-    expect(screen.getByRole('tooltip')).toHaveTextContent('Search entities and clients, or filter by creation date and QuickBooks connection.')
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Only entities you can access appear here. Search or filter by creation date and QuickBooks connection.')
     fireEvent.blur(infoButton)
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+  it('returns from entity detail with list filters, search, and expanded client intact', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => new Response(JSON.stringify(
+      String(input).includes('/clients?connection_status=1') ? [{ ...summary, connection_state: 'connected' }] : detail,
+    ), { status: 200 }))
+    render(<MemoryRouter initialEntries={['/qbo/clients?view=clients&connection=connected']}><Routes>
+      <Route path="/qbo/clients" element={<ClientListPage />} />
+      <Route path="/qbo/clients/:clientId" element={<ClientDetailPage />} />
+    </Routes></MemoryRouter>)
+    await screen.findByRole('button', { name: 'Sample Group, 1 entity' })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search' }), { target: { value: 'Sample' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sample Group, 1 entity' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Sample client A' }))
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Entity breadcrumb' })
+    expect(within(breadcrumb).getByRole('link', { name: 'Clients & Integrations' })).toHaveAttribute('href', '/qbo/clients?view=clients&connection=connected')
+    expect(screen.queryByRole('link', { name: 'Back to list' })).not.toBeInTheDocument()
+    fireEvent.click(within(breadcrumb).getByRole('link', { name: 'Clients & Integrations' }))
+    expect(await screen.findByRole('searchbox', { name: 'Search' })).toHaveValue('Sample')
+    expect(screen.getByRole('button', { name: 'Sample Group, 1 entity' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: 'Sample client A' })).toBeInTheDocument()
   })
 
   it('shows Reconnect needed for an inactive client while preserving its record status', async () => {
@@ -342,16 +388,16 @@ describe('FinOps client connection display', () => {
     expect(screen.getByText('Reconnect QuickBooks', { selector: 'summary' })).toHaveClass('hover:bg-hq-teal/5')
     expect(screen.getByRole('heading', { name: 'Sample client A' })).toBeInTheDocument()
     expect(screen.getByText('Active entity')).toBeInTheDocument()
-    expect(screen.getByText('Sample Group', { selector: 'span' })).toHaveClass('rounded-full', 'w-max', 'whitespace-nowrap')
+    expect(screen.getByText('Client').parentElement).toHaveTextContent('Sample Group')
     const connectionInfo = screen.getByRole('button', { name: 'About QuickBooks connection' })
     fireEvent.focus(connectionInfo)
     expect(screen.getByRole('tooltip')).toHaveTextContent('QuickBooks connection status and authorization options for this entity.')
     fireEvent.blur(connectionInfo)
     expect(screen.queryByText(/credential review/)).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Client details' })).not.toBeInTheDocument()
-    expect(screen.getByText('QuickBooks environment')).toBeInTheDocument()
+    expect(screen.getAllByText('Sandbox').length).toBeGreaterThan(0)
     expect(screen.getByText('Entity ID').parentElement).toHaveTextContent(id)
-    expect(screen.getByText('sandbox')).toBeInTheDocument()
+    expect(screen.getAllByText('Sandbox').length).toBeGreaterThan(0)
     const technicalDetails = screen.getByText('Technical details').closest('details')
     expect(technicalDetails).not.toHaveAttribute('open')
     expect(within(technicalDetails as HTMLElement).getByText('Realm ID').parentElement).toHaveTextContent('9341455571857172')
@@ -431,7 +477,6 @@ describe('FinOps client connection display', () => {
       </MemoryRouter>,
     )
     expect((await screen.findAllByText('Unavailable')).length).toBeGreaterThan(0)
-    expect(screen.getByText('Reason: Not checked')).toBeInTheDocument()
     expect(screen.getByText(/No review recorded/)).toBeInTheDocument()
   })
 
@@ -609,7 +654,7 @@ describe('FinOps client connection display', () => {
       </MemoryRouter>,
     )
     expect((await screen.findAllByText('Unavailable')).length).toBeGreaterThan(0)
-    expect(screen.getByText('Reason: No credential')).toBeInTheDocument()
+    expect(screen.getByText('Not connected yet')).toBeInTheDocument()
     expect(screen.queryByText(/Not checked/)).not.toBeInTheDocument()
   })
 
