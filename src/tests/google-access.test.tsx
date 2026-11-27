@@ -1766,6 +1766,49 @@ describe('Google governed access', () => {
     expect(requests.some((request) => request.path.endsWith('/access/users/user-2') && request.init?.method === 'PATCH')).toBe(false)
   }, 20000)
 
+  it.each(['delete', 'pause'] as const)('lets the Founder %s a superadmin from Role & sign-in without choosing a role', async (action) => {
+    const requests: Array<{ path: string; init?: RequestInit }> = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = String(input)
+      requests.push({ path, init })
+      if (path.endsWith('/access/session')) return Response.json({ user: { name: 'Founder', email: 'founder@example.test', issuer: 'https://accounts.google.com', sub: 'founder-sub' }, csrf: 'csrf' })
+      if (path.endsWith('/access/me')) return Response.json({ user: { id: 'user-1', role: 'Admin', status: 'active', is_super_admin: true, is_super_admin_founder: true }, effective_grants: [] })
+      if (path.endsWith('/access/users') && init?.method !== 'POST') return Response.json([{ id: 'user-2', email: 'admin@example.test', display_name: 'Admin', role: 'Admin', status: 'active', issuer: null, sub: null, is_super_admin: true, is_super_admin_founder: false }])
+      if (path.endsWith('/clients')) return Response.json([{ id: 'client-1', name: 'ACME' }])
+      if (path.endsWith('/access/users/user-2') && init?.method === 'PATCH') return Response.json({ id: 'user-2', role: 'Admin', status: 'disabled', is_super_admin: false })
+      if (path.endsWith('/access/users/user-2') && init?.method === 'DELETE') return new Response(null, { status: 204 })
+      return Response.json({ message: 'Not found' }, { status: 404 })
+    })
+    await act(async () => render(<MemoryRouter initialEntries={['/access/users?edit=user-2']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
+    const initial = await screen.findByRole('dialog', { name: 'Superadmin access' })
+    expect(within(initial).queryByRole('button', { name: 'Delete user' })).not.toBeInTheDocument()
+    fireEvent.click(within(initial).getByRole('button', { name: 'Remove superadmin access' }))
+    fireEvent.click(within(initial).getByRole('button', { name: 'Set new access' }))
+    const editor = await screen.findByRole('dialog', { name: 'Change access for Admin' })
+    expect(within(editor).queryByRole('button', { name: 'Actions & entities' })).toBeInTheDocument()
+
+    if (action === 'delete') {
+      fireEvent.click(within(editor).getByRole('button', { name: 'Delete user' }))
+      expect(within(editor).getByText('Permanently delete Admin?')).toBeInTheDocument()
+      fireEvent.change(within(editor).getByRole('textbox', { name: 'Type DELETE to confirm' }), { target: { value: 'DELETE' } })
+      fireEvent.click(within(editor).getByRole('button', { name: 'Delete person' }))
+      await waitFor(() => expect(requests.some(({ path, init }) => path.endsWith('/access/users/user-2') && init?.method === 'DELETE')).toBe(true))
+    } else {
+      fireEvent.click(within(within(editor).getByRole('group', { name: 'Sign-in status' })).getByRole('button', { name: 'Pause sign-in' }))
+      let confirmation = within(editor).getByRole('alertdialog', { name: /Pause access for admin@example.test/ })
+      expect(confirmation).toHaveTextContent('Superadmin access and sign-in will be removed')
+      fireEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
+      expect(requests.some(({ path, init }) => path.endsWith('/access/users/user-2') && init?.method === 'PATCH')).toBe(false)
+      fireEvent.click(within(within(editor).getByRole('group', { name: 'Sign-in status' })).getByRole('button', { name: 'Pause sign-in' }))
+      confirmation = within(editor).getByRole('alertdialog', { name: /Pause access for admin@example.test/ })
+      fireEvent.click(within(confirmation).getByRole('button', { name: 'Pause access' }))
+      await waitFor(() => expect(requests.some(({ path, init }) => path.endsWith('/access/users/user-2') && init?.method === 'PATCH')).toBe(true))
+      const request = requests.find(({ path, init }) => path.endsWith('/access/users/user-2') && init?.method === 'PATCH')
+      expect(JSON.parse(String(request?.init?.body))).toEqual({ is_super_admin: false, status: 'disabled' })
+    }
+    expect(requests.some(({ path }) => path.includes('/policy'))).toBe(false)
+  })
+
   it('requires the typed phrase to transfer Founder status to a bound active superadmin', async () => {
     mockGoogleSession([{ operation: 'access.manage', client_id: null, environment: null }])
     const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
