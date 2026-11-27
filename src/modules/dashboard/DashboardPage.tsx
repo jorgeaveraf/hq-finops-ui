@@ -7,6 +7,7 @@ import { Card } from '../../components/Card'
 import { useAuth } from '../auth/useAuth'
 
 type Overview = {
+  totalEntities?: number
   activeClients: number
   clientGroups: number
   demo: boolean
@@ -19,7 +20,7 @@ type Overview = {
   partial: boolean
 }
 type RecentActivity = { action: string; actor: string; actor_name?: string | null; occurred_at: string; status: string }
-type ActivitySnapshot = { total: number | null; latest: RecentActivity | null }
+type ActivitySnapshot = { todayTotal: number | null; latestQbo: RecentActivity | null }
 type PeopleSnapshot = { total: number; awaiting: number; paused: number }
 
 export function DashboardPage() {
@@ -48,8 +49,17 @@ export function DashboardPage() {
   useEffect(() => {
     if (!canViewActivity) return
     let mounted = true
-    apiRequest<{ total_count?: number | null; items?: RecentActivity[] }>('/access/activity/summary?limit=1&scope=qbo_transactions&page=1')
-      .then((data) => { if (mounted) setActivitySnapshot({ total: typeof data.total_count === 'number' ? data.total_count : null, latest: data.items?.[0] ?? null }) })
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const todayQuery = new URLSearchParams({
+      limit: '1', scope: 'qbo_transactions', page: '1',
+      from_at: todayStart.toISOString(), to_at: new Date().toISOString(),
+    })
+    Promise.all([
+      apiRequest<{ total_count?: number | null }>(`/access/activity/summary?${todayQuery}`),
+      apiRequest<{ items?: RecentActivity[] }>('/access/activity/summary?limit=1&scope=qbo_transactions&page=1'),
+    ])
+      .then(([today, qbo]) => { if (mounted) setActivitySnapshot({ todayTotal: typeof today.total_count === 'number' ? today.total_count : null, latestQbo: qbo.items?.[0] ?? null }) })
       .catch(() => { if (mounted) setActivityError(true) })
     return () => { mounted = false }
   }, [canViewActivity])
@@ -91,7 +101,7 @@ export function DashboardPage() {
             <div className="space-y-5">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <Stat label="Clients" value={overview.clientGroups} icon={<Building2 className="h-5 w-5" />} to="/qbo/clients?view=clients" />
-                <Stat label="Entities" value={overview.activeClients} icon={<Building2 className="h-5 w-5" />} to="/qbo/clients?view=entities" />
+                <Stat label="Entities" value={overview.totalEntities ?? overview.activeClients} icon={<Building2 className="h-5 w-5" />} to="/qbo/clients?view=entities" />
                 <Stat label="Connected QuickBooks connections" value={overview.connected} icon={<CheckCircle2 className="h-5 w-5" />} to="/qbo/clients?view=entities&connection=connected" />
                 <Stat label="Reconnection needed" value={overview.disconnected} icon={<AlertCircle className="h-5 w-5" />} to="/qbo/clients?view=entities&connection=reconnect-needed" attention={overview.disconnected > 0} />
               </div>
@@ -137,7 +147,7 @@ export function DashboardPage() {
       {(canViewActivity || canManagePeople) && <section aria-label="Administration overview" className="space-y-3">
         <h2 className="text-lg font-semibold text-slate-900">Operations & administration</h2>
         <div className="grid gap-3 md:grid-cols-2">
-          {canViewActivity && <Link to="/access/activity" className="group min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-hq-teal/50 hover:bg-teal-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal"><div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Activity aria-hidden="true" className="h-4 w-4 text-slate-600" />QBO transactions</div>{activitySnapshot ? <><p className="mt-3 text-xl font-semibold tabular-nums text-slate-900">{activitySnapshot.total === null ? 'Recent QBO transactions' : activitySnapshot.total === 1 ? '1 QBO transaction' : `${activitySnapshot.total} QBO transactions`}</p>{activitySnapshot.latest ? <p className="mt-2 min-w-0 text-sm font-medium text-slate-800">Latest: {activitySnapshot.latest.action} <span className="inline-flex items-center gap-1 whitespace-nowrap text-slate-500">by <UserRound aria-hidden="true" className="h-3.5 w-3.5" />{activitySnapshot.latest.actor_name || activitySnapshot.latest.actor}</span></p> : <p className="mt-2 text-sm text-slate-600">No QBO transactions in the last 15 days.</p>}</> : <p className="mt-3 text-sm text-slate-600">{activityError ? 'Activity summary unavailable.' : 'Loading activity…'}</p>}</Link>}
+          {canViewActivity && <Link to="/access/activity" className="group min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-hq-teal/50 hover:bg-teal-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal"><div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Activity aria-hidden="true" className="h-4 w-4 text-slate-600" />Activity</div>{activitySnapshot ? <><p className="mt-3 text-xl font-semibold tabular-nums text-slate-900">{activitySnapshot.todayTotal === null ? 'QBO transaction count unavailable' : activitySnapshot.todayTotal === 1 ? '1 QBO transaction today' : `${activitySnapshot.todayTotal} QBO transactions today`}</p>{activitySnapshot.latestQbo ? <p className="mt-2 min-w-0 text-sm font-medium text-slate-800">{activitySnapshot.todayTotal === 0 ? 'Most recent QBO transaction before today:' : activitySnapshot.todayTotal === null ? 'Most recent QBO transaction:' : 'Latest QBO transaction today:'} {activitySnapshot.latestQbo.action} <span className="inline-flex items-center gap-1 whitespace-nowrap text-slate-500">by <UserRound aria-hidden="true" className="h-3.5 w-3.5" />{activitySnapshot.latestQbo.actor_name || activitySnapshot.latestQbo.actor}</span></p> : <p className="mt-2 text-sm text-slate-600">No QBO transactions in the last 15 days.</p>}</> : <p className="mt-3 text-sm text-slate-600">{activityError ? 'Activity summary unavailable.' : 'Loading activity…'}</p>}</Link>}
           {canManagePeople && <Link to="/access/users" className="group flex min-w-0 items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-hq-teal/50 hover:bg-teal-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal"><div className="min-w-0"><div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Users aria-hidden="true" className="h-4 w-4 text-slate-600" />People and access</div>{peopleSnapshot ? <><p className="mt-3 text-xl font-semibold tabular-nums text-slate-900">{peopleSnapshot.total} {peopleSnapshot.total === 1 ? 'person' : 'people'} managed</p><p className="mt-2 text-sm text-slate-700">{peopleSnapshot.awaiting} awaiting first sign-in · {peopleSnapshot.paused} paused</p></> : <p className="mt-3 text-sm text-slate-600">{peopleError ? 'People summary unavailable.' : 'Loading people…'}</p>}</div></Link>}
         </div>
       </section>}

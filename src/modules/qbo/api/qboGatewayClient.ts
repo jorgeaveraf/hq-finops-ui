@@ -15,6 +15,7 @@ export type QboClient = {
   source?: 'demo'
   name: string
   client_group: string | null
+  client_group_display_name?: string | null
   status: string
   created_at?: string | null
   metadata: Record<string, unknown> | null
@@ -26,6 +27,7 @@ export type QboClient = {
 export type CreateClientPayload = {
   entityName: string
   clientGroup: string
+  clientGroupDisplayName?: string
   environment: QboEnvironment
   extraFields?: Record<string, unknown>
 }
@@ -80,6 +82,7 @@ export async function createClient(payload: CreateClientPayload, idempotencyKey:
     body: JSON.stringify({
       name: payload.entityName,
       client_group: payload.clientGroup,
+      ...(payload.clientGroupDisplayName ? { client_group_display_name: payload.clientGroupDisplayName } : {}),
       metadata: { ...(payload.extraFields || {}), tier: payload.environment },
     }),
   })

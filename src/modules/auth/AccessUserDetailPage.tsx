@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react'
-import { ArrowLeft, ArrowRight, Check, CirclePause, LogIn, RotateCcw, Shield, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, CirclePause, LogIn, RotateCcw, Send, Shield, Trash2, X } from 'lucide-react'
 import { permissionName, roleDescriptions } from './accessLabels'
 import { Navigate, useParams } from 'react-router-dom'
 import { apiRequest } from '../../api/finopsApi'
@@ -14,6 +14,7 @@ export type AccessUser = {
   id: string; email: string; display_name: string | null; role: 'Viewer' | 'Operator' | 'Admin'
   status: 'active' | 'disabled'; issuer: string | null; sub: string | null
   is_super_admin?: boolean; is_super_admin_founder?: boolean
+  invitation_sent_at?: string | null
 }
 type Grant = { id?: string; user_id?: string | null; client_id: string | null; environment: string | null; operation: string }
 type GrantDraft = Pick<Grant, 'operation' | 'client_id' | 'environment'>
@@ -74,7 +75,7 @@ export function AccessUserDetailPage() {
   return <Navigate to={`/access/users?edit=${encodeURIComponent(userId)}`} replace />
 }
 
-export function AccessUserEditor({ user, creating = false, postDemotion = false, onClose, onSaved, onDeleted }: { user: AccessUser; creating?: boolean; postDemotion?: boolean; onClose: () => void; onSaved: () => void; onDeleted: () => void }) {
+export function AccessUserEditor({ user, creating = false, postDemotion = false, onClose, onSaved, onDeleted }: { user: AccessUser; creating?: boolean; postDemotion?: boolean; onClose: () => void; onSaved: (notice?: string) => void; onDeleted: () => void }) {
   const { access, user: currentUser, refreshAccess } = useAuth()
   const canDelegate = (operation: string, clientId: string | null) => Boolean(access?.user.is_super_admin) || (access?.effective_grants ?? []).some((grant) =>
     grant.operation === operation && grant.environment == null &&
@@ -127,6 +128,7 @@ export function AccessUserEditor({ user, creating = false, postDemotion = false,
   const [showEditSelectedOnly, setShowEditSelectedOnly] = useState(false)
   const [scopeSearch, setScopeSearch] = useState('')
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [createWithInvitation, setCreateWithInvitation] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [emailError, setEmailError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -468,16 +470,25 @@ export function AccessUserEditor({ user, creating = false, postDemotion = false,
     } catch (err) { setEmailError(err instanceof Error ? `Could not check this email: ${err.message}` : 'Could not check this email. Try again.') }
     finally { setBusy(false) }
   }
-  const apply = async () => {
+  const apply = async (invite = false) => {
     if (!preview) return
     setBusy(true); setError(null)
     try {
       if (creating) {
-        await apiRequest('/access/users', { method: 'POST', body: JSON.stringify({ email: draftEmail.trim(), ...payload, grants: createSuperAdmin ? [] : grants, is_super_admin: createSuperAdmin }) })
+        const created = await apiRequest<AccessUser>('/access/users', { method: 'POST', body: JSON.stringify({ email: draftEmail.trim(), ...payload, grants: createSuperAdmin ? [] : grants, is_super_admin: createSuperAdmin }) })
+        if (invite) {
+          try {
+            await apiRequest(`/access/users/${encodeURIComponent(created.id)}/invitation`, { method: 'POST', body: '{}' })
+            setPreview(null); setEditing(false); onSaved('Person created. Invitation sent.')
+          } catch {
+            setPreview(null); setEditing(false); onSaved('Person created, but invitation could not be confirmed. You can retry from People and access.')
+          }
+          return
+        }
       } else if (pendingChanges) {
         await apiRequest(`/access/users/${encodeURIComponent(userId)}/policy`, { method: 'PUT', body: JSON.stringify({ ...payload, expected_fingerprint: preview.fingerprint, acknowledge_key_suspension: Boolean(preview.suspended_keys?.length) }) })
       }
-      setPreview(null); setEditing(false); onSaved()
+      setPreview(null); setEditing(false); onSaved(creating ? 'Person created without an invitation.' : undefined)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to apply this policy.'
       if (creating && (err as { status?: number })?.status === 409 && /email|person|user|conflict/i.test(message)) {
@@ -806,8 +817,8 @@ export function AccessUserEditor({ user, creating = false, postDemotion = false,
           {incompatibleGrants.length > 0 && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{incompatibleGrants.length} assigned {incompatibleGrants.length === 1 ? 'permission is' : 'permissions are'} outside the selected role. Remove them before reviewing changes.</p>}
           </>}
         </section>}</div>
-        {creating ? <div data-dialog-footer className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
-          <div className="min-w-0">{editSection === 'scope' && <span aria-live="polite" className="text-xs text-slate-600">{createSuperAdmin ? 'Universal access' : `${createEntityIds.length} current ${createEntityIds.length === 1 ? 'entity' : 'entities'} selected`}</span>}</div>
+        {creating ? <div data-dialog-footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">{editSection === 'scope' && <><span aria-live="polite" className="text-xs text-slate-600">{createSuperAdmin ? 'Universal access' : `${createEntityIds.length} current ${createEntityIds.length === 1 ? 'entity' : 'entities'} selected`}</span><span className="relative inline-flex"><button type="button" aria-pressed={createWithInvitation} aria-describedby="invite-review-hint" disabled={busy} onClick={() => setCreateWithInvitation((selected) => !selected)} className={`peer inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50 ${createWithInvitation ? 'border-hq-teal bg-teal-50 text-hq-teal' : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50'}`}><Send aria-hidden="true" className="h-4 w-4" />Send invitation</button><span id="invite-review-hint" role="tooltip" className="pointer-events-none absolute bottom-full left-0 z-30 mb-2 w-60 rounded-lg bg-slate-900 px-3 py-2 text-left text-xs font-normal leading-relaxed text-white opacity-0 shadow-lg transition-opacity peer-hover:opacity-100 peer-focus-visible:opacity-100">Emails a sign-in invitation after the person is created.</span></span></>}</div>
           {editSection === 'role' ? <div className="flex items-center gap-2">{!showCreationChoice && canPromoteSuperAdmin && <button type="button" aria-label="Back to account type" onClick={() => setCreateTypeStep(true)} className="icon-first-action rounded-lg border border-slate-300 bg-white px-2.5 text-sm text-slate-700"><ArrowLeft aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Back</span></button>}<button type="button" aria-label={showCreationChoice ? 'Continue to person' : createSuperAdmin ? 'Continue to review' : 'Continue to access'} disabled={busy || (showCreationChoice ? creationChoice === 'choice' : !validDraftEmail)} onClick={() => { if (showCreationChoice) setCreateTypeStep(false); else void continueToAccess() }} className="icon-first-action rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><ArrowRight aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">{showCreationChoice ? 'Continue to person' : createSuperAdmin ? 'Continue to review' : 'Continue to access'}</span></button></div>
             : <div className="flex items-center gap-2"><button type="button" aria-label="Back" onClick={() => { setError(null); setEditSection('role') }} className="icon-first-action rounded-lg border border-slate-300 bg-white px-2.5 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal"><ArrowLeft aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Back</span></button><button type="button" aria-label="Review person" disabled={busy || (!createSuperAdmin && grants.length === 0)} onClick={() => void requestPreview()} className="icon-first-action rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Check aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Review person</span></button></div>}
         </div> : !isSuperAdmin && <div data-dialog-footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
@@ -823,7 +834,13 @@ export function AccessUserEditor({ user, creating = false, postDemotion = false,
               : <button type="button" aria-label="Review changes" disabled={busy || (!pendingChanges && !postDemotion) || incompatibleGrants.length > 0 || demotingSuperAdmin && !grants.some((grant) => grant.operation === 'client.read' || grant.operation === 'qbo.entity.read')} onClick={() => void requestPreview()} className="icon-first-action rounded-lg bg-hq-teal px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Check aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">{busy ? 'Checking…' : 'Review changes'}</span></button>}
           </div>
         </div>}
-        </> : <><PolicyReviewSummary creating={creating} createSuperAdmin={creating && createSuperAdmin} postDemotion={postDemotion || demotingSuperAdmin} name={creating ? null : user.display_name} email={creating ? draftEmail.trim() : user.email} role={role} savedRole={savedPolicy?.role ?? role} status={status} savedStatus={savedPolicy?.status ?? status} grants={grants} savedGrants={savedPolicy?.grants ?? []} clients={clients} preview={preview} error={error} headingRef={previewHeading} /><div data-dialog-footer className="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6"><button type="button" disabled={busy} onClick={() => { setPreview(null); setError(null) }} className="icon-first-action rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm"><ArrowLeft aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Back to editing</span></button><button type="button" disabled={busy} onClick={() => void apply()} className="icon-first-action rounded-lg bg-hq-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Check aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">{busy ? 'Saving…' : creating ? 'Add person' : 'Save changes'}</span></button></div></>}
+        </> : <>
+          <PolicyReviewSummary creating={creating} createSuperAdmin={creating && createSuperAdmin} postDemotion={postDemotion || demotingSuperAdmin} name={creating ? null : user.display_name} email={creating ? draftEmail.trim() : user.email} role={role} savedRole={savedPolicy?.role ?? role} status={status} savedStatus={savedPolicy?.status ?? status} grants={grants} savedGrants={savedPolicy?.grants ?? []} clients={clients} preview={preview} error={error} headingRef={previewHeading} />
+          <div data-dialog-footer className="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+              <button type="button" aria-label="Back to editing" disabled={busy} onClick={() => { setPreview(null); setError(null) }} className="icon-first-action rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><ArrowLeft aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">Back to editing</span></button>
+              <button type="button" aria-label={creating ? 'Confirm person' : 'Save changes'} disabled={busy} onClick={() => void apply(creating && createWithInvitation)} className="icon-first-action rounded-lg bg-hq-teal px-3 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hq-teal disabled:opacity-50"><Check aria-hidden="true" className="h-4 w-4" /><span className="icon-first-label">{creating ? 'Confirm person' : 'Save changes'}</span></button>
+          </div>
+        </>}
       {confirmPauseSuperAdmin && <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/30 p-4 sm:p-6"><div role="alertdialog" aria-modal="true" aria-labelledby="pause-superadmin-title" aria-describedby="pause-superadmin-description" className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"><h3 id="pause-superadmin-title" className="text-lg font-semibold text-slate-950">Pause access for {user.email}?</h3><p id="pause-superadmin-description" className="mt-2 text-sm leading-6 text-slate-600">Superadmin access and sign-in will be removed immediately. To restore access later, assign a role and permissions explicitly. Unsaved changes will not be applied.</p>{error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}<div className="mt-6 flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => { setConfirmPauseSuperAdmin(false); setError(null) }} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button><button type="button" disabled={busy} onClick={() => void pauseSuperAdmin()} className="rounded-lg bg-hq-teal px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50">{busy ? 'Pausing…' : 'Pause access'}</button></div></div></div>}
       {adminTypeChoiceFrom && !confirmSuperAdminChange && <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/30 p-4 sm:p-6"><div role="dialog" aria-modal="true" aria-labelledby="admin-type-title" className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"><h3 id="admin-type-title" className="text-lg font-semibold text-slate-950">Choose admin access</h3><p className="mt-1 text-sm text-slate-600">How should {user.display_name || user.email} access FinOps?</p><div className="mt-5 grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => { if (showSuperAdminRoleEditor) { setShowSuperAdminRoleEditor(false); setDemotingSuperAdmin(true) } if (demotingSuperAdmin || showSuperAdminRoleEditor) setDemotionRoleChosen(true); setAdminTypeChoiceFrom(null) }} className="rounded-xl border border-slate-200 p-4 text-left hover:border-hq-teal hover:bg-teal-50"><strong className="block text-sm text-slate-950">Admin</strong><span className="mt-1 block text-xs leading-5 text-slate-600">Choose entities and administrative permissions.</span></button><button type="button" disabled={status !== 'active'} onClick={() => { if ((demotingSuperAdmin || showSuperAdminRoleEditor) && user.is_super_admin) keepSuperAdmin(); else setConfirmSuperAdminChange(true) }} className="rounded-xl border border-slate-200 p-4 text-left hover:border-hq-teal hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"><strong className="block text-sm text-slate-950">Superadmin</strong><span className="mt-1 block text-xs leading-5 text-slate-600">Full access to current and future entities and administration.</span></button></div>{status !== 'active' && <p className="mt-3 text-xs text-slate-600">Choose Allow sign-in to grant Superadmin access.</p>}<div className="mt-5 flex justify-end"><button type="button" onClick={cancelAdminTypeChoice} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button></div></div></div>}
       {confirmSuperAdminChange && !confirmDiscard && <div data-superadmin-confirm role="alertdialog" aria-labelledby="superadmin-confirm-title" aria-describedby="superadmin-confirm-description" className="w-full">
