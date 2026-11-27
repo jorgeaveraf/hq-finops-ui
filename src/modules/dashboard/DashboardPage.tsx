@@ -23,13 +23,11 @@ type ActivitySnapshot = { total: number | null; latest: RecentActivity | null }
 type PeopleSnapshot = { total: number; awaiting: number; paused: number }
 
 export function DashboardPage() {
-  const { role, kind, access } = useAuth()
-  const canReadClients = kind === 'google'
-    ? Boolean(access?.effective_grants.some((grant) => ['client.read', 'qbo.entity.read', 'entities.manage'].includes(grant.operation)))
-    : role === 'admin'
-  const canViewActivity = kind === 'google' && access?.user.role === 'Admin'
+  const { access } = useAuth()
+  const canReadClients = Boolean(access?.effective_grants.some((grant) => ['client.read', 'qbo.entity.read', 'entities.manage'].includes(grant.operation)))
+  const canViewActivity = access?.user.role === 'Admin'
     && Boolean(access.effective_grants.some((grant) => grant.operation === 'activity.read' && !grant.client_id && !grant.environment))
-  const canManagePeople = kind === 'google' && access?.user.role === 'Admin'
+  const canManagePeople = access?.user.role === 'Admin'
     && Boolean(access.effective_grants.some((grant) => grant.operation === 'access.manage' && !grant.client_id && !grant.environment))
   const [overview, setOverview] = useState<Overview | null>(null)
   const [error, setError] = useState<string | null>(null)

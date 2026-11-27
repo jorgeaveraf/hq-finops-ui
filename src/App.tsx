@@ -20,23 +20,22 @@ import { CreateClientPage } from './modules/qbo/pages/CreateClientPage'
 import { AppLayout } from './layout/AppLayout'
 
 export function ClientsRoute() {
-  const { kind, role, access } = useAuth()
-  const canManageEntities = kind === 'local' ? role === 'admin'
-    : kind === 'google' && access?.user.role === 'Admin' && access.effective_grants.some((grant) => grant.operation === 'entities.manage' && !grant.client_id && !grant.environment)
+  const { access } = useAuth()
+  const canManageEntities = access?.user.role === 'Admin' && access.effective_grants.some((grant) => grant.operation === 'entities.manage' && !grant.client_id && !grant.environment)
   return <ClientListPage readOnly={!canManageEntities} />
 }
 
 export function ClientDetailRoute() {
-  const { kind, access } = useAuth()
+  const { access } = useAuth()
   const grants = access?.effective_grants || []
   const { clientId } = useParams<{ clientId: string }>()
   const permitted = (operation: string) => grants.some((grant) => grant.operation === operation
     && !grant.environment && (!grant.client_id || grant.client_id === clientId))
   const canConnect = access?.user.role !== 'Viewer' && (permitted('client.read') || permitted('qbo.entity.read'))
   return <ClientDetailPage
-    canUpdate={kind === 'local' || (access?.user.role === 'Admin' && permitted('entities.manage') && (permitted('client.read') || permitted('qbo.entity.read')))}
-    canDelete={kind === 'local' || (access?.user.role === 'Admin' && permitted('entities.manage') && (permitted('client.read') || permitted('qbo.entity.read')))}
-    canManageConnection={kind === 'local' || canConnect}
+    canUpdate={access?.user.role === 'Admin' && permitted('entities.manage') && (permitted('client.read') || permitted('qbo.entity.read'))}
+    canDelete={access?.user.role === 'Admin' && permitted('entities.manage') && (permitted('client.read') || permitted('qbo.entity.read'))}
+    canManageConnection={canConnect}
   />
 }
 
