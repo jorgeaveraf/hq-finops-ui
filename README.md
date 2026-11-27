@@ -21,7 +21,7 @@ For real ACME Sandbox testing, run `npm run test:local-qbo` in the API repositor
 
 ## Environment
 
-The frontend calls only `/automations/api/*`, which Vite proxies to the sibling API container during local development. The backend owns the gateway API key, verifies password hashes, issues an eight-hour HttpOnly session cookie and enforces the admin role and CSRF protection on writes. `FINOPS_LOCAL_ONLY` defaults to true; the regular sandbox API explicitly permits only the local QBO Gateway, while the isolated smoke API permits only its private mock. `FINOPS_ALLOWED_ENVIRONMENTS` defaults to `sandbox`. Production serves the static UI through Nginx and routes `/automations/api/*` to the separately deployed FinOps backend.
+The frontend calls only `/automations/api/*`, which Vite proxies to the sibling API container during local development. Sign-in uses Google; the backend issues an eight-hour HttpOnly session cookie, checks current Gateway grants and enforces CSRF protection on writes. `FINOPS_LOCAL_ONLY` defaults to true; the regular sandbox API explicitly permits only the local QBO Gateway, while the isolated smoke API permits only its private mock. `FINOPS_ALLOWED_ENVIRONMENTS` defaults to `sandbox`. Production serves the static UI through Nginx and routes `/automations/api/*` to the separately deployed FinOps backend.
 
 ## Scripts
 

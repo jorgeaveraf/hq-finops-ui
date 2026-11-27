@@ -1814,18 +1814,23 @@ describe('Google governed access', () => {
     expect(screen.queryByRole('link', { name: 'Change access for Next founder' })).not.toBeInTheDocument()
   })
 
-  it('retains the local login when no Google session exists', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ message: 'Authentication required' }), { status: 401 }))
+  it('shows Google as the only sign-in method when no session exists', async () => {
+    const requests: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      requests.push(String(input))
+      return new Response(JSON.stringify({ message: 'Authentication required' }), { status: 401 })
+    })
     await act(async () => render(<MemoryRouter><AuthProvider><LoginPage /></AuthProvider></MemoryRouter>))
     expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Username')).not.toBeInTheDocument()
+    expect(requests).toEqual(['/automations/api/access/session'])
   })
 
   it('shows an access explanation instead of a raw callback error', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ message: 'Authentication required' }), { status: 401 }))
     await act(async () => render(<MemoryRouter initialEntries={['/login?auth_error=not_authorized']}><AuthProvider><LoginPage /></AuthProvider></MemoryRouter>))
-    expect(screen.getByRole('alert')).toHaveTextContent("Access isn't enabled for this account")
-    expect(screen.getByRole('alert')).toHaveTextContent('ask a FinOps administrator to add your email in People and access')
+    expect(screen.getByRole('alert')).toHaveTextContent("This account isn't enabled.")
+    expect(screen.getByRole('alert')).not.toHaveTextContent('People and access')
     expect(screen.getByRole('alert').querySelector('svg')).toBeNull()
     expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument()
   })

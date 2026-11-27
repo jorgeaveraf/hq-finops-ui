@@ -9,11 +9,13 @@ import { AppLayout } from '../layout/AppLayout'
 afterEach(() => vi.restoreAllMocks())
 
 async function renderOverview(overview: object) {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => new Response(JSON.stringify(
-    String(input).endsWith('/overview')
-      ? overview
-      : { user: { name: 'Admin', email: 'admin' }, role: 'admin', csrf: 'test' },
-  ), { status: 200 }))
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const path = String(input)
+    return new Response(JSON.stringify(path.endsWith('/overview') ? overview
+      : path.endsWith('/access/session')
+        ? { user: { name: 'Admin', email: 'admin@example.test', issuer: 'https://accounts.google.com', sub: 'admin-sub' }, csrf: 'test' }
+        : { user: { id: 'admin-1', role: 'Admin', status: 'active' }, effective_grants: [{ operation: 'client.read', client_id: null, environment: null }] }), { status: 200 })
+  })
 
   await act(async () => {
     render(
