@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { ActivityPage } from '../modules/activity/ActivityPage'
 import { ActivityPersonFilter } from '../modules/activity/ActivityPersonFilter'
 import { ActivityDateFilter } from '../modules/activity/ActivityDateFilter'
+import { MemoryRouter } from 'react-router-dom'
 
 const originalShowModal = HTMLDialogElement.prototype.showModal
 const originalClose = HTMLDialogElement.prototype.close
@@ -14,14 +15,55 @@ afterEach(() => {
 
 it('keeps a long person list scrollable and lets the last email be selected', () => {
   const onChange = vi.fn()
-  const actors = Array.from({ length: 40 }, (_, index) => `person${String(index).padStart(2, '0')}@example.test`)
+  const actors = Array.from({ length: 40 }, (_, index) => ({ email: `person${String(index).padStart(2, '0')}@example.test`, deleted: false }))
   render(<ActivityPersonFilter value="" actors={actors} onChange={onChange} />)
   fireEvent.click(screen.getByRole('button', { name: 'Person Everyone' }))
+  expect(screen.getAllByRole('button').map((button) => button.textContent)).not.toContain('person00@example.test')
+  expect(screen.queryByLabelText('Email suggestions')).not.toBeInTheDocument()
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search by email' }), { target: { value: 'pe' } })
+  expect(screen.queryByLabelText('Email suggestions')).not.toBeInTheDocument()
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search by email' }), { target: { value: 'per' } })
   const suggestions = screen.getByLabelText('Email suggestions')
   expect(suggestions).toHaveClass('max-h-44', 'overflow-y-auto')
   expect(within(suggestions).getAllByRole('button')).toHaveLength(40)
   fireEvent.click(within(suggestions).getByRole('button', { name: 'person39@example.test' }))
   expect(onChange).toHaveBeenCalledWith('person39@example.test')
+})
+
+it('shows email suggestions from the third character and hides them when search is shortened', () => {
+  render(<ActivityPersonFilter value="" actors={[{ email: 'fna@example.test', deleted: false }]} onChange={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Person Everyone' }))
+  const search = screen.getByRole('searchbox', { name: 'Search by email' })
+  fireEvent.change(search, { target: { value: 'fn' } })
+  expect(screen.queryByLabelText('Email suggestions')).not.toBeInTheDocument()
+  fireEvent.change(search, { target: { value: 'fna' } })
+  expect(screen.getByRole('button', { name: 'fna@example.test' })).toBeInTheDocument()
+  fireEvent.change(search, { target: { value: 'fn' } })
+  expect(screen.queryByLabelText('Email suggestions')).not.toBeInTheDocument()
+})
+
+it('shows a deleted account only when it has activity in the selected view', async () => {
+  const requests: string[] = []
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const url = String(input)
+    requests.push(url)
+    if (url.includes('/access/activity/actors?')) return Response.json(url.includes('scope=completed')
+      ? [{ email: 'former@example.test', deleted: true }, { email: 'current@example.test', deleted: false }]
+      : [{ email: 'current@example.test', deleted: false }])
+    return Response.json({ items: [], next_cursor: null, total_count: 0 })
+  })
+  render(<MemoryRouter><ActivityPage /></MemoryRouter>)
+  await screen.findByText('No activity found')
+  fireEvent.click(screen.getByRole('button', { name: 'All activity' }))
+  await waitFor(() => expect(requests.some((url) => url.includes('/access/activity/actors?scope=completed&detailed=true'))).toBe(true))
+  fireEvent.click(screen.getByRole('button', { name: 'Person Everyone' }))
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search by email' }), { target: { value: 'former' } })
+  expect(await screen.findByRole('button', { name: 'former@example.test Deleted account' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Person Everyone' }))
+  fireEvent.click(screen.getByRole('button', { name: 'QBO transactions' }))
+  await waitFor(() => expect(requests.some((url) => url.includes('/access/activity/actors?scope=qbo_transactions&detailed=true'))).toBe(true))
+  fireEvent.click(screen.getByRole('button', { name: 'Person Everyone' }))
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'former@example.test Deleted account' })).not.toBeInTheDocument())
 })
 
 it('does not navigate to months before the visible 15-day range', () => {
@@ -44,7 +86,7 @@ it('does not navigate to months before the visible 15-day range', () => {
 
 it('presents completed events without a redundant status label', async () => {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-    if (String(input).endsWith('/access/activity/actors')) return new Response('[]', { status: 200 })
+    if (String(input).includes('/access/activity/actors?')) return new Response('[]', { status: 200 })
     return new Response(JSON.stringify({ items: [
       { id: 'grant', occurred_at: '2026-11-18T15:37:40Z', reference_id: 'ref-1', actor: 'jorge.vera@headquarters.co', key_name: null, client_name: null, target_name: 'fna@headquarters.co', environment: null, action: 'Granted fna@headquarters.co permission to edit entities', category: 'create', status: 'completed' },
       { id: 'revoke', occurred_at: '2026-11-18T15:18:28Z', reference_id: 'ref-2', actor: 'jorge.vera@headquarters.co', actor_name: 'Jorge Vera', key_name: null, client_name: null, target_name: 'Jorge Vera', target_email: 'jorge.vera@headquarters.co', environment: null, action: "Revoked Jorge Vera's permission to delete entities", category: 'delete', status: 'completed' },
@@ -52,7 +94,7 @@ it('presents completed events without a redundant status label', async () => {
     ], next_cursor: null, total_count: 3 }), { status: 200 })
   })
 
-  render(<ActivityPage />)
+  render(<MemoryRouter><ActivityPage /></MemoryRouter>)
   const history = await screen.findByLabelText('Activity history')
   const events = within(history).getAllByRole('article')
   expect(events).toHaveLength(3)
@@ -73,11 +115,11 @@ it('does not offer Read as an Activity operation', async () => {
   const requests: string[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input)
-    if (url.endsWith('/access/activity/actors')) return new Response('[]', { status: 200 })
+    if (url.includes('/access/activity/actors?')) return new Response('[]', { status: 200 })
     requests.push(url)
     return new Response(JSON.stringify({ items: [], next_cursor: null, total_count: 0 }), { status: 200 })
   })
-  render(<ActivityPage />)
+  render(<MemoryRouter><ActivityPage /></MemoryRouter>)
   await screen.findByText('No activity found')
   fireEvent.click(screen.getByRole('button', { name: /^Operation / }))
   expect(screen.queryByRole('option', { name: 'Read' })).not.toBeInTheDocument()
@@ -93,11 +135,11 @@ it('can clear a date filter with Any time', async () => {
   const requests: string[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input)
-    if (url.endsWith('/access/activity/actors')) return new Response('[]', { status: 200 })
+    if (url.includes('/access/activity/actors?')) return new Response('[]', { status: 200 })
     requests.push(url)
     return new Response(JSON.stringify({ items: [], next_cursor: null, total_count: 0 }), { status: 200 })
   })
-  render(<ActivityPage />)
+  render(<MemoryRouter><ActivityPage /></MemoryRouter>)
   await screen.findByText('No activity found')
   fireEvent.click(screen.getByRole('button', { name: /^When / }))
   fireEvent.click(screen.getByRole('option', { name: 'Last 7 days' }))
@@ -110,7 +152,7 @@ it('can clear a date filter with Any time', async () => {
 
 it('shows the QuickBooks record and a concise audit detail', async () => {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-    if (String(input).endsWith('/access/activity/actors')) return new Response('[]', { status: 200 })
+    if (String(input).includes('/access/activity/actors?')) return new Response('[]', { status: 200 })
     return new Response(JSON.stringify({ items: [{
       id: 'vendor', occurred_at: '2026-11-24T15:57:00Z', reference_id: 'req-vendor',
       actor: 'fna@example.test', actor_name: 'Fiona Alvarez', key_name: 'test 2',
@@ -120,7 +162,7 @@ it('shows the QuickBooks record and a concise audit detail', async () => {
       category: 'create', status: 'completed',
     }], next_cursor: null, total_count: 1 }), { status: 200 })
   })
-  render(<ActivityPage />)
+  render(<MemoryRouter><ActivityPage /></MemoryRouter>)
   const event = await screen.findByRole('article')
   expect(event).toHaveTextContent('Fiona Alvarez created QuickBooks vendor “Nova Farms Logistics” for ACME edited2')
   fireEvent.click(within(event).getByText('Details'))
@@ -132,7 +174,7 @@ it('shows the QuickBooks record and a concise audit detail', async () => {
 
 it('shows concrete permission changes in an access event', async () => {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-    if (String(input).endsWith('/access/activity/actors')) return Response.json([])
+    if (String(input).includes('/access/activity/actors?')) return Response.json([])
     return Response.json({ items: [{
       id: 'policy', occurred_at: '2026-11-26T15:57:00Z', reference_id: 'req-policy',
       actor: 'founder@example.test', key_name: null, client_name: null,
@@ -142,7 +184,7 @@ it('shows concrete permission changes in an access event', async () => {
       category: 'update', status: 'completed',
     }], next_cursor: null, total_count: 1 })
   })
-  render(<ActivityPage />)
+  render(<MemoryRouter><ActivityPage /></MemoryRouter>)
   const event = await screen.findByRole('article')
   fireEvent.click(within(event).getByText('Details'))
   expect(event).toHaveTextContent('Granted Read QuickBooks data on ACME')

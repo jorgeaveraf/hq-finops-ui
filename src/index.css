@@ -115,8 +115,8 @@ body {
 :root[data-theme='dark'] .bg-emerald-50 { background-color: #203730; }
 :root[data-theme='dark'] :is(.text-emerald-700, .text-emerald-800) { color: #94d6ad; }
 :root[data-theme='dark'] .border-emerald-100 { border-color: #456c58; }
-:root[data-theme='dark'] .bg-blue-50 { background-color: #213149; }
-:root[data-theme='dark'] .text-blue-800 { color: #a9c9f5; }
+:root[data-theme='dark'] :is(.bg-blue-50, .bg-sky-50) { background-color: #213149; }
+:root[data-theme='dark'] :is(.text-blue-800, .text-sky-800) { color: #a9c9f5; }
 :root[data-theme='dark'] .border-blue-100 { border-color: #49617f; }
 :root[data-theme='dark'] .bg-amber-50 { background-color: #392f20; }
 :root[data-theme='dark'] :is(.text-amber-700, .text-amber-800, .text-amber-900, .text-amber-950) { color: #f5cd84; }

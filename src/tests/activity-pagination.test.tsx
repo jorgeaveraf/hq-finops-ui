@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ActivityPage } from '../modules/activity/ActivityPage'
+import { MemoryRouter } from 'react-router-dom'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -19,7 +20,7 @@ it('shows the total and lets a person jump to a page without stepping through ea
     }), { status: 200 })
   })
 
-  render(<ActivityPage />)
+  render(<MemoryRouter><ActivityPage /></MemoryRouter>)
   expect(await screen.findByText('updated page 1')).toBeInTheDocument()
   const pagination = screen.getByRole('navigation', { name: 'Activity pages' })
   expect(pagination).toHaveTextContent('of 5')

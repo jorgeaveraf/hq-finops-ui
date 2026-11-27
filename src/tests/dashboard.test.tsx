@@ -36,7 +36,7 @@ async function renderOverview(overview: object) {
 describe('Dashboard', () => {
   it('shows saved operational data without duplicate client-list links or false live status', async () => {
     await renderOverview({
-      activeClients: 4, clientGroups: 2, demo: true, connected: 1, disconnected: 1, notChecked: 1,
+      totalEntities: 6, activeClients: 4, clientGroups: 2, demo: true, connected: 1, disconnected: 1, notChecked: 1,
       unavailable: 1, noCredential: 0, partial: true,
       disconnectedClients: [{ id: '00000000-0000-4000-8000-000000000001', name: 'Sample client B', environment: 'sandbox' }],
     })
@@ -49,7 +49,7 @@ describe('Dashboard', () => {
     expect(screen.getByText('Entities')).toBeInTheDocument()
     expect(screen.getByText('Connected QuickBooks connections')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Clients 2' })).toHaveAttribute('href', '/qbo/clients?view=clients')
-    expect(screen.getByRole('link', { name: 'Entities 4' })).toHaveAttribute('href', '/qbo/clients?view=entities')
+    expect(screen.getByRole('link', { name: 'Entities 6' })).toHaveAttribute('href', '/qbo/clients?view=entities')
     expect(screen.getByRole('link', { name: 'Connected QuickBooks connections 1' })).toHaveAttribute('href', '/qbo/clients?view=entities&connection=connected')
     expect(screen.getByRole('link', { name: 'Reconnection needed 1' })).toHaveAttribute('href', '/qbo/clients?view=entities&connection=reconnect-needed')
     expect(screen.getByText('Connected QuickBooks connections').closest('div')).toHaveClass('text-slate-600')
@@ -82,7 +82,7 @@ describe('Dashboard', () => {
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' })
     expect(sidebar).toHaveClass('w-20')
     expect(within(sidebar).queryByRole('button', { name: /pin sidebar/i })).not.toBeInTheDocument()
-    expect(within(sidebar).getByText('QBO Gateway').parentElement).toHaveAttribute('aria-hidden', 'true')
+    expect(within(sidebar).getByText('FinOps Console').parentElement).toHaveAttribute('aria-hidden', 'true')
     expect(within(sidebar).getByRole('link', { name: 'Clients & Integrations' })).toBeInTheDocument()
     vi.useFakeTimers()
     fireEvent.mouseEnter(sidebar.firstElementChild as Element)
@@ -95,14 +95,14 @@ describe('Dashboard', () => {
     fireEvent.mouseEnter(sidebar.firstElementChild as Element)
     act(() => vi.advanceTimersByTime(300))
     vi.useRealTimers()
-    expect(within(sidebar).getByText('QBO Gateway').parentElement).toHaveAttribute('aria-hidden', 'false')
+    expect(within(sidebar).getByText('FinOps Console').parentElement).toHaveAttribute('aria-hidden', 'false')
     fireEvent.click(within(sidebar).getByRole('link', { name: 'Overview' }))
     expect(sidebar).toHaveClass('w-64')
     fireEvent.mouseLeave(sidebar.firstElementChild as Element)
-    expect(within(sidebar).getByText('QBO Gateway').parentElement).toHaveAttribute('aria-hidden', 'false')
+    expect(within(sidebar).getByText('FinOps Console').parentElement).toHaveAttribute('aria-hidden', 'false')
     fireEvent.click(screen.getByRole('main'))
     expect(sidebar).toHaveClass('w-20')
-    expect(within(sidebar).getByText('QBO Gateway').parentElement).toHaveAttribute('aria-hidden', 'true')
+    expect(within(sidebar).getByText('FinOps Console').parentElement).toHaveAttribute('aria-hidden', 'true')
     fireEvent.mouseEnter(sidebar.firstElementChild as Element)
     fireEvent.click(within(sidebar).getByRole('button', { name: 'Account options' }))
     expect(sidebar).toHaveClass('w-64')

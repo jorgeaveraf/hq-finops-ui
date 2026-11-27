@@ -32,6 +32,8 @@ export function CreateClientPage() {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const newClientGroup = toClientGroup(newClientName)
+  const uppercaseClientName = newClientName.trim() === newClientName.trim().toLocaleUpperCase()
+    && newClientName.trim() !== newClientName.trim().toLocaleLowerCase()
 
   const validateClientName = (value: string) => {
     const group = toClientGroup(value)
@@ -109,6 +111,7 @@ export function CreateClientPage() {
       const payload = {
         entityName: entityName.trim(),
         clientGroup,
+        ...(clientChoice === NEW_CLIENT && uppercaseClientName ? { clientGroupDisplayName: newClientName.trim().replace(/\s+/g, ' ') } : {}),
         environment: environment as QboEnvironment,
         extraFields: { ...parsedExtra, tier: environment },
       }
@@ -157,7 +160,7 @@ export function CreateClientPage() {
               required
               error={fieldErrors.client}
               options={[
-                ...existingGroups.map((group) => ({ value: group, label: formatClientGroup(group) })),
+                ...existingGroups.map((group) => ({ value: group, label: formatClientGroup(group, existingEntities.find((entity) => entity.client_group === group && entity.client_group_display_name)?.client_group_display_name) })),
               ]}
               actionOption={{ value: NEW_CLIENT, label: 'Create a new client' }}
             />

@@ -8,8 +8,9 @@ export function getClientName(client: QboClient) {
   return client.name || client.id
 }
 
-export function formatClientGroup(clientGroup: string | null | undefined) {
+export function formatClientGroup(clientGroup: string | null | undefined, displayName?: string | null) {
   if (!clientGroup) return 'No client assigned'
+  if (displayName?.trim()) return displayName.trim()
   if (clientGroup === 'mfny' || clientGroup === 'mfny_1') return 'MFNY'
   return clientGroup.split('_').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 }

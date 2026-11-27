@@ -216,7 +216,7 @@ export function ClientListPage({ readOnly = false }: { readOnly?: boolean }) {
     const connection = entity.connection_state ?? 'unavailable'
     const matchesConnection = connectionFilter === 'all' || connection === connectionFilter
     const matchesSearch = !searchTerm || getClientName(entity).toLocaleLowerCase().includes(searchTerm)
-      || formatClientGroup(entity.client_group).toLocaleLowerCase().includes(searchTerm)
+      || formatClientGroup(entity.client_group, entity.client_group_display_name).toLocaleLowerCase().includes(searchTerm)
       || (entity.client_group || '').includes(searchTerm)
     return matchesConnection && matchesSearch && matchesCreatedDate(entity, createdFilter, createdFrom, createdTo, now)
   })
@@ -225,7 +225,7 @@ export function ClientListPage({ readOnly = false }: { readOnly?: boolean }) {
     : clients.length === 1 ? '1 entity' : `${clients.length} entities`
   const groups = clientGroups.map((group) => ({
     key: group,
-    label: formatClientGroup(group),
+    label: formatClientGroup(group, clients.find((entity) => entity.client_group === group && entity.client_group_display_name)?.client_group_display_name),
     entities: visibleEntities.filter((entity) => entity.client_group === group).sort((left, right) => compareEntities(left, right, sort)),
   }))
   if (hasUnassigned) {

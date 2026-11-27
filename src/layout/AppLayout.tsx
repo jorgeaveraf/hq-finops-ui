@@ -202,7 +202,7 @@ export function AppLayout() {
         >
           <div className="flex min-h-20 items-center gap-3 overflow-hidden border-b border-slate-100 px-5">
             <img src={hqLogo} alt="HQ" className="h-10 w-10 shrink-0 rounded-full object-contain" />
-            <div aria-hidden={!expanded} className={`min-w-0 flex-1 shrink-0 whitespace-nowrap transition-[opacity,transform] motion-reduce:transition-none ${expanded ? 'translate-x-0 opacity-100 duration-200 delay-75' : 'pointer-events-none -translate-x-1 opacity-0 duration-100'}`}><p className="text-sm font-semibold text-hq-teal">Headquarters</p><p className="text-sm font-semibold text-slate-900">QBO Gateway</p></div>
+            <div aria-hidden={!expanded} className={`min-w-0 flex-1 shrink-0 whitespace-nowrap transition-[opacity,transform] motion-reduce:transition-none ${expanded ? 'translate-x-0 opacity-100 duration-200 delay-75' : 'pointer-events-none -translate-x-1 opacity-0 duration-100'}`}><p className="text-sm font-semibold text-hq-teal">Headquarters</p><p className="text-sm font-semibold text-slate-900">FinOps Console</p></div>
           </div>
           <nav aria-label="Main navigation" className="flex-1 space-y-2 overflow-hidden p-4">
             {items.map((item) => {

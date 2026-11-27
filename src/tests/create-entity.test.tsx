@@ -88,6 +88,7 @@ describe('create entity modal', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create entity' }))
     expect(await screen.findByText('Created entity detail')).toBeInTheDocument()
     expect(submitted).toMatchObject({ name: 'Nova Farms New Jersey', client_group: 'nova_farms', metadata: { tier: 'sandbox' } })
+    expect(submitted).not.toHaveProperty('client_group_display_name')
     expect(submitted).not.toHaveProperty('client_id')
   })
 
@@ -112,6 +113,22 @@ describe('create entity modal', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create entity' }))
     expect(await screen.findByText('Created entity detail')).toBeInTheDocument()
     expect(posted[0].client_group).toBe('new_demo_group')
+    expect(posted[0]).not.toHaveProperty('client_group_display_name')
+  })
+
+  it('preserves an uppercase name for a newly created client without changing its key', async () => {
+    const posted: Record<string, unknown>[] = []
+    mockClients((payload) => posted.push(payload))
+    renderForm()
+    const dialog = screen.getByRole('dialog', { name: 'Create entity' })
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Client Select a client' })).not.toBeDisabled())
+    choose('Client', 'Create a new client')
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Client name' }), { target: { value: 'ACS' } })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Entity name' }), { target: { value: 'acs_ca' } })
+    choose('Environment', 'Sandbox')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create entity' }))
+    expect(await screen.findByText('Created entity detail')).toBeInTheDocument()
+    expect(posted[0]).toMatchObject({ client_group: 'acs', client_group_display_name: 'ACS' })
   })
 
   it('rejects an existing entity name in the same client and environment before posting', async () => {
