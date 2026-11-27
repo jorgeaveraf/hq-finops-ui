@@ -2,7 +2,6 @@ import { createContext } from 'react'
 
 export type Session = {
   user: { name: string; email: string }
-  role: 'admin' | 'operator'
   csrf: string
 }
 
@@ -20,13 +19,11 @@ export type MyAccess = {
 
 export type AuthContextValue = {
   user: Session['user'] | null
-  role: Session['role'] | null
-  kind: 'google' | 'local' | null
+  kind: 'google' | null
   access: MyAccess | null
   authError: string | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
   startGoogleLogin: () => void
   refreshAccess: () => Promise<MyAccess>

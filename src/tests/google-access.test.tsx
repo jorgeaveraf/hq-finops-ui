@@ -1558,7 +1558,12 @@ describe('Google governed access', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Continue to review' }))
     await within(dialog).findByRole('region', { name: 'Superadmin access summary' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Review person' }))
-    await screen.findByRole('region', { name: 'Policy impact preview' })
+    const review = await screen.findByRole('region', { name: 'Policy impact preview' })
+    expect(within(review).getByText('Superadmin')).toBeInTheDocument()
+    expect(within(review).getByText('Full control of all current and future entities and their QBO resources.')).toBeInTheDocument()
+    expect(within(review).getByText('All access')).toBeInTheDocument()
+    expect(within(review).queryByText('No permission changes')).not.toBeInTheDocument()
+    expect(within(review).queryByText('Admin can manage sensitive access only through the permissions shown below.')).not.toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Add person' }))
     await screen.findByText('Person added with the selected access.')
     const create = requests.find((request) => request.path.endsWith('/access/users') && request.init?.method === 'POST')
@@ -1809,18 +1814,23 @@ describe('Google governed access', () => {
     expect(screen.queryByRole('link', { name: 'Change access for Next founder' })).not.toBeInTheDocument()
   })
 
-  it('retains the local login when no Google session exists', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ message: 'Authentication required' }), { status: 401 }))
+  it('shows Google as the only sign-in method when no session exists', async () => {
+    const requests: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      requests.push(String(input))
+      return new Response(JSON.stringify({ message: 'Authentication required' }), { status: 401 })
+    })
     await act(async () => render(<MemoryRouter><AuthProvider><LoginPage /></AuthProvider></MemoryRouter>))
     expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Username')).not.toBeInTheDocument()
+    expect(requests).toEqual(['/automations/api/access/session'])
   })
 
   it('shows an access explanation instead of a raw callback error', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ message: 'Authentication required' }), { status: 401 }))
     await act(async () => render(<MemoryRouter initialEntries={['/login?auth_error=not_authorized']}><AuthProvider><LoginPage /></AuthProvider></MemoryRouter>))
-    expect(screen.getByRole('alert')).toHaveTextContent("Access isn't enabled for this account")
-    expect(screen.getByRole('alert')).toHaveTextContent('ask a FinOps administrator to add your email in People and access')
+    expect(screen.getByRole('alert')).toHaveTextContent("This account isn't enabled.")
+    expect(screen.getByRole('alert')).not.toHaveTextContent('People and access')
     expect(screen.getByRole('alert').querySelector('svg')).toBeNull()
     expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument()
   })

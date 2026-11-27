@@ -13,7 +13,7 @@ const activityNavItem = { to: '/access/activity', label: 'Activity', icon: Activ
 const usersNavItem = { to: '/access/users', label: 'People and access', icon: Users }
 
 function AccountMenu({ compact = false, mobile = false }: { compact?: boolean; mobile?: boolean }) {
-  const { user, logout, kind, role, access } = useAuth()
+  const { user, logout, access } = useAuth()
   const [open, setOpen] = useState(false)
   const [showEmail, setShowEmail] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -26,7 +26,7 @@ function AccountMenu({ compact = false, mobile = false }: { compact?: boolean; m
   const dialogTitleId = useId()
   const dialogDescriptionId = useId()
   const emailHintId = useId()
-  const roleLabel = kind === 'google' ? access?.user.role : role === 'admin' ? 'Admin' : role === 'operator' ? 'Operator' : null
+  const roleLabel = access?.user.role
 
   const closeConfirm = () => {
     if (isSigningOut) return
@@ -100,9 +100,9 @@ function AccountMenu({ compact = false, mobile = false }: { compact?: boolean; m
             <p className="text-sm font-semibold text-slate-900">{user?.name ?? 'FinOps Operator'}</p>
             {user?.email && <p className="truncate text-xs text-slate-600">{user.email}</p>}
           </div>
-          {kind === 'google' && <div className="border-b border-slate-100 py-1">
+          <div className="border-b border-slate-100 py-1">
             <NavLink end to="/access" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100"><UserRound size={16} aria-hidden="true" />My account</NavLink>
-          </div>}
+          </div>
           <button type="button" onClick={() => { setOpen(false); setSignOutError(null); setConfirmOpen(true) }} className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-hq-teal">
             <LogOut className="h-4 w-4" aria-hidden="true" />Sign out
           </button>
@@ -142,7 +142,7 @@ function AccountMenu({ compact = false, mobile = false }: { compact?: boolean; m
 }
 
 export function AppLayout() {
-  const { role, kind, access } = useAuth()
+  const { access } = useAuth()
   const { pathname } = useLocation()
   const mobileNavRef = useRef<HTMLElement>(null)
   const [pinned, setPinned] = useState(false)
@@ -150,13 +150,11 @@ export function AppLayout() {
   const sidebarRef = useRef<HTMLElement>(null)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const expanded = pinned || temporaryOpen
-  const canReadClients = kind === 'google'
-    ? access?.effective_grants.some((grant) => ['client.read', 'qbo.entity.read', 'entities.manage'].includes(grant.operation))
-    : role === 'admin'
+  const canReadClients = access?.effective_grants.some((grant) => ['client.read', 'qbo.entity.read', 'entities.manage'].includes(grant.operation))
   const items = [
     ...(canReadClients ? navItems : navItems.filter((item) => item.to !== '/qbo/clients')),
-    ...(kind === 'google' && access?.user.role === 'Admin' && access.effective_grants.some((grant) => grant.operation === 'access.manage' && !grant.client_id && !grant.environment) ? [usersNavItem] : []),
-    ...(kind === 'google' && access?.user.role === 'Admin' && access.effective_grants.some((grant) => grant.operation === 'activity.read' && !grant.client_id && !grant.environment) ? [activityNavItem] : []),
+    ...(access?.user.role === 'Admin' && access.effective_grants.some((grant) => grant.operation === 'access.manage' && !grant.client_id && !grant.environment) ? [usersNavItem] : []),
+    ...(access?.user.role === 'Admin' && access.effective_grants.some((grant) => grant.operation === 'activity.read' && !grant.client_id && !grant.environment) ? [activityNavItem] : []),
   ]
 
   const cancelHover = () => {
