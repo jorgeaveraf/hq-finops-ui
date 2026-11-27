@@ -30,11 +30,11 @@ function mockGoogleSession(grants: object[], role = 'Admin') {
     if (path.endsWith('/access/me')) return new Response(JSON.stringify({
       user: { id: 'user-1', role, status: 'active' }, effective_grants: grants,
     }), { status: 200 })
-    if (path.endsWith('/access/activity/actors')) return new Response(JSON.stringify(['owner@example.test']), { status: 200 })
+    if (path.includes('/access/activity/actors?')) return new Response(JSON.stringify([{ email: 'owner@example.test', deleted: false }]), { status: 200 })
     if (path.includes('/access/activity')) return new Response(JSON.stringify({ items: [{
       id: 'evt-1', occurred_at: '2026-11-15T08:00:00Z', reference_id: 'req-1',
       actor: 'owner@example.test', key_name: 'Reporting', client_name: 'Allowed entity', target_name: 'Allowed entity',
-      environment: 'prod', action: 'Viewed QuickBooks data for Allowed entity', category: 'read', status: 'completed',
+      environment: 'prod', action: 'Created QuickBooks invoice for Allowed entity', category: 'create', status: 'completed',
     }], next_cursor: null, total_count: 1 }), { status: 200 })
     if (path.endsWith('/overview')) return new Response(JSON.stringify({
       activeClients: 1, clientGroups: 1, demo: false, connected: 1, disconnected: 0,
@@ -162,17 +162,28 @@ describe('Google governed access', () => {
       { operation: 'access.manage', client_id: null, environment: null },
     ])
     const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
-    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => String(input).endsWith('/access/users')
-      ? Response.json([{ id: 'user-1', status: 'active', sub: 'owner' }, { id: 'user-2', status: 'active', sub: null }, { id: 'user-3', status: 'disabled', sub: 'paused' }]) : baseFetch(input, init))
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const path = String(input)
+      if (path.endsWith('/access/users')) return Response.json([{ id: 'user-1', status: 'active', sub: 'owner' }, { id: 'user-2', status: 'active', sub: null }, { id: 'user-3', status: 'disabled', sub: 'paused' }])
+      if (path.includes('/access/activity/summary?') && path.includes('scope=qbo_transactions') && path.includes('from_at=')) return Response.json({ items: [], total_count: 0 })
+      return baseFetch(input, init)
+    })
     await act(async () => render(<MemoryRouter initialEntries={['/']}><AuthProvider><Routes>
       <Route element={<AppLayout />}><Route index element={<DashboardPage />} /></Route>
     </Routes></AuthProvider></MemoryRouter>))
     const overview = screen.getByRole('region', { name: 'Administration overview' })
-    expect(within(overview).getByRole('link', { name: /QBO transactions/ })).toHaveAttribute('href', '/access/activity')
+    expect(within(overview).getByRole('link', { name: /Activity/ })).toHaveAttribute('href', '/access/activity')
     expect(within(overview).getByRole('link', { name: /People and access/ })).toHaveAttribute('href', '/access/users')
-    expect(await within(overview).findByText('1 QBO transaction')).toBeInTheDocument()
-    const transactionCard = within(overview).getByRole('link', { name: /QBO transactions/ })
-    expect(transactionCard).toHaveTextContent('Latest: Viewed QuickBooks data for Allowed entity by owner@example.test')
+    expect(await within(overview).findByText('0 QBO transactions today')).toBeInTheDocument()
+    const transactionCard = within(overview).getByRole('link', { name: /Activity/ })
+    expect(transactionCard).toHaveTextContent('Most recent QBO transaction before today: Created QuickBooks invoice for Allowed entity by owner@example.test')
+    expect(transactionCard).not.toHaveTextContent('Nov 15')
+    expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('/access/activity/summary?limit=1&scope=qbo_transactions&page=1'), expect.anything())
+    const todayRequest = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input).includes('/access/activity/summary?') && String(input).includes('scope=qbo_transactions') && String(input).includes('from_at='))
+    const todayParams = new URLSearchParams(String(todayRequest?.[0]).split('?')[1])
+    expect(todayParams.get('page')).toBe('1')
+    expect(new Date(todayParams.get('from_at')!).getHours()).toBe(0)
+    expect(new Date(todayParams.get('to_at')!).getTime()).toBeGreaterThan(new Date(todayParams.get('from_at')!).getTime())
     expect(await within(overview).findByText('2 people managed')).toBeInTheDocument()
     expect(within(overview).getByText('1 awaiting first sign-in · 1 paused')).toBeInTheDocument()
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' })
@@ -181,6 +192,28 @@ describe('Google governed access', () => {
     const activity = within(sidebar).getByRole('link', { name: 'Activity' })
     expect(administration.compareDocumentPosition(people) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(people.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it.each([
+    { todayCount: 2, latest: true, expected: 'Latest QBO transaction today: Created QuickBooks invoice for Allowed entity by owner@example.test' },
+    { todayCount: 0, latest: false, expected: 'No QBO transactions in the last 15 days.' },
+  ])('labels the Activity card clearly when today has $todayCount transactions and latest is $latest', async ({ todayCount, latest, expected }) => {
+    mockGoogleSession([{ operation: 'activity.read', client_id: null, environment: null }])
+    const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const path = String(input)
+      if (path.includes('/access/activity/summary?') && path.includes('scope=qbo_transactions')) {
+        if (path.includes('from_at=')) return Response.json({ items: [], total_count: todayCount })
+        if (!latest) return Response.json({ items: [], total_count: 0 })
+      }
+      return baseFetch(input, init)
+    })
+    await act(async () => render(<MemoryRouter><AuthProvider><DashboardPage /></AuthProvider></MemoryRouter>))
+    await screen.findByText(`${todayCount} QBO transactions today`)
+    const activityCard = screen.getByRole('link', { name: /Activity/ })
+    expect(activityCard).toHaveTextContent(`${todayCount} QBO transactions today`)
+    expect(activityCard).toHaveTextContent(expected)
+    expect(activityCard).not.toHaveTextContent('Nov 15')
   })
 
   it('summarizes All entities access and lists effective access before filtering', async () => {
@@ -310,7 +343,7 @@ describe('Google governed access', () => {
     expect(screen.getByText('Using API key Reporting')).toBeInTheDocument()
     expect(screen.getAllByText('Production').length).toBeGreaterThan(0)
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
-    expect(screen.getByText('viewed QuickBooks data for Allowed entity')).toBeInTheDocument()
+    expect(screen.getByText('created QuickBooks invoice for Allowed entity')).toBeInTheDocument()
     expect(screen.queryByText('api_key_id')).not.toBeInTheDocument()
     expect(screen.queryByText('qbo.account.read')).not.toBeInTheDocument()
     expect(screen.queryByText('503')).not.toBeInTheDocument()
@@ -622,6 +655,15 @@ describe('Google governed access', () => {
     fireEvent.click(within(addDialog).getByRole('button', { name: 'Continue to access' }))
     await waitFor(() => expect(within(addDialog).getByRole('button', { name: '2 · Access' })).toHaveAttribute('aria-current', 'step'))
     expect(within(addDialog).queryByRole('alert')).not.toBeInTheDocument()
+    const invitationChoice = within(addDialog).getByRole('button', { name: 'Send invitation' })
+    expect(invitationChoice.closest('[data-dialog-footer]')).toBeInTheDocument()
+    expect(invitationChoice).toHaveAttribute('aria-pressed', 'true')
+    expect(invitationChoice).toHaveAttribute('aria-describedby', 'invite-review-hint')
+    expect(within(addDialog).getByRole('tooltip')).toHaveTextContent('Emails a sign-in invitation after the person is created.')
+    expect(globalThis.fetch).not.toHaveBeenCalledWith('/automations/api/access/users', expect.objectContaining({ method: 'POST' }))
+    fireEvent.click(invitationChoice)
+    expect(invitationChoice).toHaveAttribute('aria-pressed', 'false')
+    expect(globalThis.fetch).not.toHaveBeenCalledWith('/automations/api/access/users', expect.objectContaining({ method: 'POST' }))
     fireEvent.click(screen.getByRole('button', { name: 'Review person' }))
     const review = await screen.findByRole('region', { name: 'Policy impact preview' })
     expect(review).toHaveTextContent('ana@example.test')
@@ -631,8 +673,10 @@ describe('Google governed access', () => {
     expect(review).toHaveTextContent('+ Edit')
     expect(within(review).queryByRole('region', { name: 'API key impact' })).not.toBeInTheDocument()
     expect(within(review).queryByText('Sign-in')).not.toBeInTheDocument()
-    fireEvent.click(within(addDialog).getByRole('button', { name: 'Add person' }))
-    await screen.findByText('Person added with the selected access.')
+    expect(within(addDialog).queryByRole('dialog', { name: 'Create this person' })).not.toBeInTheDocument()
+    expect(within(addDialog).queryByRole('button', { name: 'Send invitation' })).not.toBeInTheDocument()
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Confirm person' }))
+    await screen.findByText('Person created without an invitation.')
     expect(globalThis.fetch).toHaveBeenCalledWith('/automations/api/access/users', expect.objectContaining({
       method: 'POST', body: JSON.stringify({ email: 'ana@example.test', role: 'Operator', status: 'active', grants: [{ operation: 'qbo.entity.read', client_id: 'client-1', environment: null }, { operation: 'qbo.entity.edit', client_id: 'client-1', environment: null }, { operation: 'qbo.entity.read', client_id: 'client-2', environment: null }, { operation: 'qbo.entity.edit', client_id: 'client-2', environment: null }], is_super_admin: false }),
     }))
@@ -672,12 +716,13 @@ describe('Google governed access', () => {
     expect(within(dialog).getByText('0 current entities selected')).toBeInTheDocument()
     expect(within(administration).getByRole('button', { name: 'Manage entities in FinOps' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(dialog).getByRole('button', { name: 'Review person' })).toBeEnabled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send invitation' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Review person' }))
     const review = await within(dialog).findByRole('region', { name: 'Policy impact preview' })
     expect(review).toHaveTextContent('+ Manage entities')
     expect(review).toHaveTextContent('+ Activity')
     expect(review).not.toHaveTextContent('+ Read')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Add person' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm person' }))
     await waitFor(() => expect(submitted).toHaveLength(1))
     expect(submitted[0]).toMatchObject({ email: 'admin@example.test', role: 'Admin', is_super_admin: false, grants: [
       { operation: 'entities.manage', client_id: null, environment: null },
@@ -711,6 +756,7 @@ describe('Google governed access', () => {
     expect(within(dialog).getByText('4 current entities selected')).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: /Selected entities/ }))
     expect(within(dialog).getByText('3 current entities selected')).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send invitation' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Review person' }))
     const review = await within(dialog).findByRole('region', { name: 'Policy impact preview' })
     expect(review).not.toHaveTextContent('Entity 4')
@@ -748,7 +794,7 @@ describe('Google governed access', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Review person' }))
     expect(await within(dialog).findByRole('region', { name: 'Policy impact preview' })).toHaveTextContent('+ Read')
     expect(within(dialog).getByRole('region', { name: 'Policy impact preview' })).not.toHaveTextContent('+ Edit')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Add person' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm person' }))
     await waitFor(() => expect(submitted).toHaveLength(1))
     expect(submitted[0]).toMatchObject({ role, grants: [{ operation: 'qbo.entity.read', client_id: 'client-1', environment: null }] })
   })
@@ -1501,6 +1547,32 @@ describe('Google governed access', () => {
     expect(impact).not.toHaveTextContent('No impact')
   })
 
+  it('keeps the invitation action hidden after resuming sign-in until the pointer moves', async () => {
+    mockGoogleSession([{ operation: 'access.manage', client_id: null, environment: null }])
+    const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
+    let resumed = false
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const path = String(input)
+      if (path.endsWith('/access/users')) return Response.json([{ id: 'user-2', email: 'ana@example.test', display_name: 'Ana', role: 'Operator', status: resumed ? 'active' : 'disabled', issuer: null, sub: null, invitation_sent_at: '2026-11-27T12:00:00Z' }])
+      if (path.endsWith('/access/grants?user_id=user-2')) return Response.json([{ operation: 'client.read', client_id: 'client-1', environment: null }])
+      if (path.endsWith('/access/users/user-2/policy/preview')) return Response.json({ fingerprint: 'resume-preview', affected_keys: [], suspended_keys: [], changes: ['Status: disabled → active'] })
+      if (path.endsWith('/access/users/user-2/policy') && init?.method === 'PUT') { resumed = true; return Response.json({ status: 'active' }) }
+      return baseFetch(input, init)
+    })
+    await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
+    fireEvent.click(await screen.findByRole('link', { name: 'Change access for Ana' }))
+    fireEvent.click(within(await screen.findByRole('group', { name: 'Sign-in status' })).getByRole('button', { name: /Allow sign-in/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review changes' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('Access updated.')).toBeInTheDocument()
+    const resend = await screen.findByRole('button', { name: 'Resend invitation' })
+    expect(resend).toHaveClass('md:opacity-0', 'md:focus-visible:opacity-100')
+    expect(resend).not.toHaveClass('md:group-hover:opacity-100')
+    fireEvent.pointerMove(window)
+    expect(resend).toHaveClass('md:group-hover:opacity-100')
+    expect(globalThis.fetch).not.toHaveBeenCalledWith('/automations/api/access/users/user-2/invitation', expect.objectContaining({ method: 'POST' }))
+  })
+
   it('hides only the signed-in person from People', async () => {
     mockGoogleSession([
       { id: 'users-grant', operation: 'access.manage', client_id: null, environment: null },
@@ -1535,6 +1607,40 @@ describe('Google governed access', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent('Your role sets the actions available; the permissions below show where they apply.')
   })
 
+  it('shows an accepted invitation and requires confirmation before resending', async () => {
+    mockGoogleSession([{ operation: 'access.manage', client_id: null, environment: null }])
+    const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
+    const sentAt = '2026-11-27T12:00:00Z'
+    let invitationRequests = 0
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const path = String(input)
+      if (path.endsWith('/access/users')) return Response.json([
+        { id: 'user-2', email: 'ana@example.test', display_name: 'Ana', role: 'Operator', status: 'active', issuer: null, sub: null, invitation_sent_at: sentAt },
+        { id: 'user-3', email: 'signed-in@example.test', display_name: null, role: 'Viewer', status: 'active', issuer: 'google', sub: 'google-3' },
+        { id: 'user-4', email: 'paused@example.test', display_name: null, role: 'Viewer', status: 'disabled', issuer: null, sub: null },
+      ])
+      if (path.endsWith('/access/users/user-2/invitation')) {
+        invitationRequests += 1
+        expect(init?.method).toBe('POST')
+        return new Response(JSON.stringify({ id: 'user-2', invitation_sent_at: sentAt }), { status: 202 })
+      }
+      return baseFetch(input, init)
+    })
+    await act(async () => render(<MemoryRouter initialEntries={['/access/users']}><AuthProvider><Routes><Route path="/access/users" element={<AccessAdministrationPage />} /></Routes></AuthProvider></MemoryRouter>))
+    expect(await screen.findByText('Awaiting sign-in')).toBeInTheDocument()
+    expect(screen.getByText('Allowed')).toBeInTheDocument()
+    expect(screen.getByText('Paused')).toBeInTheDocument()
+    expect(screen.queryByText('Invitation sent')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Send invitation' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Resend invitation' })).toHaveClass('md:group-hover:opacity-100')
+    fireEvent.click(screen.getByRole('button', { name: 'Resend invitation' }))
+    expect(screen.getByRole('dialog', { name: 'Resend invitation?' })).toBeInTheDocument()
+    expect(invitationRequests).toBe(0)
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Resend invitation?' })).getByRole('button', { name: 'Resend invitation' }))
+    expect(await screen.findByRole('status', { name: '' })).toHaveTextContent('Invitation requested again.')
+    expect(invitationRequests).toBe(1)
+  })
+
   it('lets a superadmin create another superadmin without individual grants', async () => {
     mockGoogleSession([{ operation: 'access.manage', client_id: null, environment: null }])
     const baseFetch = vi.mocked(globalThis.fetch).getMockImplementation()!
@@ -1543,6 +1649,8 @@ describe('Google governed access', () => {
       const path = String(input)
       requests.push({ path, init })
       if (path.endsWith('/access/me')) return Response.json({ user: { id: 'user-1', role: 'Admin', status: 'active', is_super_admin: true, is_super_admin_founder: false }, effective_grants: [{ operation: 'access.manage', client_id: null, environment: null }] })
+      if (path.endsWith('/access/users/new-user/invitation')) return Response.json({ id: 'new-user', invitation_sent_at: '2026-11-27T12:00:00Z' }, { status: 202 })
+      if (path.endsWith('/access/users') && init?.method === 'POST') return Response.json({ id: 'new-user' }, { status: 201 })
       if (path.endsWith('/access/users')) return Response.json([])
       if (path.endsWith('/clients')) return Response.json([])
       return baseFetch(input, init)
@@ -1557,6 +1665,8 @@ describe('Google governed access', () => {
     expect(within(dialog).queryByRole('group', { name: 'Role' })).not.toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Continue to review' }))
     await within(dialog).findByRole('region', { name: 'Superadmin access summary' })
+    expect(within(dialog).getByRole('button', { name: 'Send invitation' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(dialog).getByRole('button', { name: 'Send invitation' }).closest('[data-dialog-footer]')).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Review person' }))
     const review = await screen.findByRole('region', { name: 'Policy impact preview' })
     expect(within(review).getByText('Superadmin')).toBeInTheDocument()
@@ -1564,10 +1674,13 @@ describe('Google governed access', () => {
     expect(within(review).getByText('All access')).toBeInTheDocument()
     expect(within(review).queryByText('No permission changes')).not.toBeInTheDocument()
     expect(within(review).queryByText('Admin can manage sensitive access only through the permissions shown below.')).not.toBeInTheDocument()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Add person' }))
-    await screen.findByText('Person added with the selected access.')
+    expect(within(dialog).queryByRole('button', { name: 'Send invitation' })).not.toBeInTheDocument()
+    expect(requests.some((request) => request.path.endsWith('/access/users/new-user/invitation'))).toBe(false)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm person' }))
+    await screen.findByText('Person created. Invitation sent.')
     const create = requests.find((request) => request.path.endsWith('/access/users') && request.init?.method === 'POST')
     expect(JSON.parse(String(create?.init?.body))).toMatchObject({ email: 'new-admin@example.test', is_super_admin: true, grants: [] })
+    expect(requests.some((request) => request.path.endsWith('/access/users/new-user/invitation') && request.init?.method === 'POST')).toBe(true)
   })
 
   it.each(['Viewer', 'Operator'] as const)('promotes a paused %s with draft Allow sign-in in one update', async (startingRole) => {

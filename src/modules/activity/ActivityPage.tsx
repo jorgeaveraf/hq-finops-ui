@@ -3,7 +3,7 @@ import { Check, ChevronLeft, ChevronRight, Copy } from 'lucide-react'
 import { FilterDropdown } from '../../components/FilterDropdown'
 import { InfoTooltip } from '../../components/InfoTooltip'
 import { ActivityDateFilter } from './ActivityDateFilter'
-import { ActivityPersonFilter } from './ActivityPersonFilter'
+import { ActivityPersonFilter, type ActivityActorOption } from './ActivityPersonFilter'
 import { apiRequest } from '../../api/finopsApi'
 import { AuthContext } from '../auth/AuthContext'
 
@@ -90,6 +90,14 @@ function queryFor(filters: Filters, scope: Scope, pageNumber: number) {
   return `/access/activity/summary?${query}`
 }
 
+function actorQueryFor(filters: Filters, scope: Scope) {
+  const query = new URLSearchParams({ scope, detailed: 'true' })
+  if (filters.from) query.set('from_at', new Date(`${filters.from}T00:00:00`).toISOString())
+  if (filters.to) query.set('to_at', new Date(`${filters.to}T23:59:59`).toISOString())
+  if (filters.category) query.set('category', filters.category)
+  return `/access/activity/actors?${query}`
+}
+
 export function ActivityPage() {
   const user = useContext(AuthContext)?.user
   const paginationRef = useRef<HTMLElement>(null)
@@ -101,17 +109,18 @@ export function ActivityPage() {
   const [page, setPage] = useState<ActivityPageResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [actors, setActors] = useState<string[]>([])
+  const [actors, setActors] = useState<ActivityActorOption[]>([])
   const totalCount = page?.total_count
   const lastPage = typeof totalCount === 'number' ? Math.max(1, Math.ceil(totalCount / pageSize)) : null
+  const actorQuery = actorQueryFor(filters, scope)
 
   useEffect(() => {
     let active = true
-    apiRequest<string[]>('/access/activity/actors')
-      .then((value) => { if (active) setActors(value) })
-      .catch(() => { /* Activity remains usable if actor suggestions are unavailable. */ })
+    apiRequest<(ActivityActorOption | string)[]>(actorQuery)
+      .then((value) => { if (active) setActors(value.map((item) => typeof item === 'string' ? { email: item, deleted: false } : item)) })
+      .catch(() => { if (active) setActors([]) /* Activity remains usable if actor suggestions are unavailable. */ })
     return () => { active = false }
-  }, [])
+  }, [actorQuery])
 
   useEffect(() => {
     let active = true

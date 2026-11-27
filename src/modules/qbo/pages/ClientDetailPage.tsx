@@ -150,7 +150,7 @@ export function ClientDetailPage({ readOnly = false, canUpdate = true, canDelete
         </div>
       </div>
       {client && <div className="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-3">
-        <div><p className="text-xs font-medium text-slate-500">Client</p><p className="mt-1 text-sm font-semibold text-slate-900">{formatClientGroup(client.client_group)}</p></div>
+        <div><p className="text-xs font-medium text-slate-500">Client</p><p className="mt-1 text-sm font-semibold text-slate-900">{formatClientGroup(client.client_group, client.client_group_display_name)}</p></div>
         <div><p className="text-xs font-medium text-slate-500">Entity status</p><p className={`mt-1 inline-flex items-center gap-1.5 text-sm font-semibold ${recordStatus === 'active' ? 'text-emerald-700' : 'text-slate-700'}`}><span className={`h-2 w-2 rounded-full ${recordStatus === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`} aria-hidden="true" />{recordStatusLabel}</p></div>
         {client.source === 'demo'
           ? <div><p className="text-xs font-medium text-slate-500">Access</p><p className="mt-1 text-sm font-semibold text-slate-700">Demo preview · read-only</p></div>

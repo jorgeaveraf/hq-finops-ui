@@ -31,5 +31,6 @@ describe('client display labels', () => {
     expect(getClientName({ ...mfny, id: '00000000-0000-4000-8000-000000000001' })).toBe('mfny_1')
     expect(getClientName({ ...mfny, id: '00000000-0000-4000-8000-000000000001', name: 'mfny' })).toBe('mfny')
     expect(formatClientGroup('nova_farms')).toBe('Nova Farms')
+    expect(formatClientGroup('acs', 'ACS')).toBe('ACS')
   })
 })
